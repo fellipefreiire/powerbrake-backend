@@ -1,0 +1,18 @@
+{
+  "extends": "@rocketseat/eslint-config/node",
+  "parserOptions": {
+    "project": "./tsconfig.eslint.json"
+  },
+  "rules": {
+    "no-useless-constructor": "off",
+    "no-new": "off",
+    "dot-notation": "off"
+  },
+  "settings": {
+    "import/resolver": {
+      "typescript": {
+        "project": "./tsconfig.json"
+      }
+    }
+  }
+}

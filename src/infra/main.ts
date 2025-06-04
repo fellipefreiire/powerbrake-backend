@@ -1,0 +1,31 @@
+import { NestFactory } from '@nestjs/core'
+import { AppModule } from './app.module'
+import { EnvService } from './env/env.service'
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
+import { VersioningType } from '@nestjs/common'
+import { AppErrorFilter } from './http/filters/app-error.filter'
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule)
+  app.enableVersioning({
+    type: VersioningType.URI,
+  })
+
+  app.useGlobalFilters(new AppErrorFilter())
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('Powerbrake API')
+    .setDescription('Documentação da API do projeto')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build()
+
+  const document = SwaggerModule.createDocument(app, swaggerConfig)
+  SwaggerModule.setup('docs', app, document)
+
+  const envService = app.get(EnvService)
+  const port = envService.get('APP_PORT')
+
+  await app.listen(port)
+}
+bootstrap()

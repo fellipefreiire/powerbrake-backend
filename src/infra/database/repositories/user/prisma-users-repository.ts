@@ -1,0 +1,111 @@
+import type { PaginationParams } from '@/core/repositories/pagination-params'
+import type { UsersRepository } from '@/domain/user/application/repositories/user-repository'
+import type { User } from '@/domain/user/enterprise/entities/user'
+import { Injectable } from '@nestjs/common'
+import { PrismaService } from '../../prisma/prisma.service'
+import { PrismaUserMapper } from '../../prisma/mappers/user/prisma-user.mapper'
+import { CacheRepository } from '@/infra/cache/cache-repository'
+
+@Injectable()
+export class PrismaUsersRepository implements UsersRepository {
+  constructor(
+    private prisma: PrismaService,
+    private cache: CacheRepository,
+  ) {}
+
+  async findById(id: string): Promise<User | null> {
+    const cacheHit = await this.cache.get(`user:${id}:details`)
+
+    if (cacheHit) {
+      const cachedData = JSON.parse(cacheHit)
+
+      return PrismaUserMapper.toDomain(cachedData)
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+      },
+    })
+
+    if (!user) {
+      return null
+    }
+
+    await this.cache.set(`user:${id}:details`, JSON.stringify(user))
+
+    return PrismaUserMapper.toDomain(user)
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+      },
+    })
+
+    if (!user) {
+      return null
+    }
+
+    const userDetails = PrismaUserMapper.toDomain(user)
+
+    return userDetails
+  }
+
+  async list({ page }: PaginationParams): Promise<User[]> {
+    const cacheHit = await this.cache.get('users')
+
+    if (cacheHit) {
+      const cachedData = JSON.parse(cacheHit)
+
+      return cachedData.map(PrismaUserMapper.toDomain)
+    }
+
+    const users = await this.prisma.user.findMany({
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 20,
+      skip: (page - 1) * 20,
+    })
+
+    await this.cache.set('users', JSON.stringify(users))
+
+    return users.map(PrismaUserMapper.toDomain)
+  }
+
+  async save(user: User): Promise<void> {
+    const data = PrismaUserMapper.toPrisma(user)
+
+    await Promise.all([
+      this.prisma.user.update({
+        where: { id: data.id },
+        data,
+      }),
+      this.cache.delete(`user:${data.id}:details`),
+    ])
+  }
+
+  async create(user: User): Promise<void> {
+    const data = PrismaUserMapper.toPrisma(user)
+
+    await Promise.all([
+      this.prisma.user.create({
+        data,
+      }),
+      this.cache.delete('users'),
+    ])
+  }
+
+  async delete(user: User): Promise<void> {
+    const data = PrismaUserMapper.toPrisma(user)
+
+    await Promise.all([
+      this.prisma.user.delete({
+        where: { id: data.id },
+      }),
+      this.cache.delete(`user:${data.id}:*`),
+    ])
+  }
+}
