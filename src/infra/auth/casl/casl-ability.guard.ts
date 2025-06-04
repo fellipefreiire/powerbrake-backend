@@ -26,7 +26,9 @@ export class CaslAbilityGuard implements CanActivate {
     const user = request.user
     const ability = this.caslAbilityFactory.defineAbilityFor(user)
 
-    const isAllowed = policyHandlers.every((handler) => handler(ability))
+    const isAllowed = policyHandlers.every((handler) =>
+      handler(ability, context),
+    )
 
     if (!isAllowed) {
       throw new ForbiddenException('Acesso negado')

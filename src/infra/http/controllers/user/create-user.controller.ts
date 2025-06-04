@@ -22,6 +22,7 @@ import {
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger'
 
@@ -32,7 +33,11 @@ import {
   InternalServerErrorDto,
   UnprocessableEntityDto,
 } from '../../dtos/error/generic'
-import { UserAlreadyExistsDto, UserForbiddenDto } from '../../dtos/error/user'
+import {
+  UserAlreadyExistsDto,
+  UserForbiddenDto,
+  WrongCredentialsDto,
+} from '../../dtos/error/user'
 import { UserResponseDto } from '../../dtos/response/user'
 import { CreateUserRequestDto } from '../../dtos/requests/user'
 
@@ -59,6 +64,7 @@ export class CreateUserController {
   @ApiBody({ type: CreateUserRequestDto })
   @ApiCreatedResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })
+  @ApiUnauthorizedResponse({ type: WrongCredentialsDto })
   @ApiForbiddenResponse({ type: UserForbiddenDto })
   @ApiConflictResponse({ type: UserAlreadyExistsDto })
   @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })

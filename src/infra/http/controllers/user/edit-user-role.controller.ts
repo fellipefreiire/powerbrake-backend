@@ -6,7 +6,6 @@ import {
   Patch,
   UseFilters,
   UseGuards,
-  UsePipes,
 } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -16,6 +15,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger'
 import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
@@ -37,6 +37,7 @@ import {
 import {
   InvalidRoleTransitionDto,
   UserNotFoundDto,
+  WrongCredentialsDto,
 } from '../../dtos/error/user'
 import { EditUserRoleRequestDto } from '../../dtos/requests/user'
 
@@ -49,25 +50,26 @@ type EditUserRoleBodySchema = z.infer<typeof editUserRoleBodySchema>
 @UseFilters(UserErrorFilter)
 @ApiTags('Users')
 @ServiceTag('user')
-@Controller({ path: 'users/role', version: '1' })
+@Controller({ path: 'users', version: '1' })
 export class EditUserRoleController {
   constructor(private editUserRoleUseCase: EditUserRoleUseCase) {}
 
-  @Patch(':id')
+  @Patch(':id/role')
   @UseGuards(CaslAbilityGuard)
-  @CheckPolicies((ability) => ability.can('update', 'User'))
+  @CheckPolicies((ability) => ability.can('update-role', 'User'))
   @HttpCode(200)
   @ApiBody({ type: EditUserRoleRequestDto })
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })
+  @ApiUnauthorizedResponse({ type: WrongCredentialsDto })
   @ApiForbiddenResponse({ type: InvalidRoleTransitionDto })
   @ApiNotFoundResponse({ type: UserNotFoundDto })
   @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
   @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
-  @UsePipes(new ZodValidationPipe(editUserRoleBodySchema))
   async handle(
     @Param('id', ParseUuidPipe) id: string,
-    @Body() body: EditUserRoleBodySchema,
+    @Body(new ZodValidationPipe(editUserRoleBodySchema))
+    body: EditUserRoleBodySchema,
   ) {
     const { role } = body
 

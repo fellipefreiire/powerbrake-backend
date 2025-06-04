@@ -4,6 +4,7 @@ import { Injectable } from '@nestjs/common'
 import { Encrypter } from '../../../../shared/cryptography/encrypter'
 import { WrongCredentialsError } from './errors/wrong-credentials-error'
 import { HashComparer } from '../../../../shared/cryptography/hash-comparer'
+import { UserInactiveError } from './errors/user-inactive-error'
 
 type AuthenticateUserUseCaseRequest = {
   email: string
@@ -11,14 +12,14 @@ type AuthenticateUserUseCaseRequest = {
 }
 
 type AuthenticateUserUseCaseResponse = Either<
-  WrongCredentialsError,
+  WrongCredentialsError | UserInactiveError,
   {
     accessToken: string
     expiresIn: number
   }
 >
 
-export const expiresIn = 60 * 60 // 1 hours
+export const expiresIn = 60 * 60 // 1 hour(s)
 
 @Injectable()
 export class AuthenticateUserUseCase {
@@ -36,6 +37,10 @@ export class AuthenticateUserUseCase {
 
     if (!user) {
       return left(new WrongCredentialsError())
+    }
+
+    if (!user.isActive) {
+      return left(new UserInactiveError())
     }
 
     const isPasswordValid = await this.hashComparar.compare(

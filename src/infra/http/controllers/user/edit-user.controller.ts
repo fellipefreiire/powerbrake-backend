@@ -6,7 +6,6 @@ import {
   Patch,
   UseFilters,
   UseGuards,
-  UsePipes,
 } from '@nestjs/common'
 import {
   ApiBadRequestResponse,
@@ -16,6 +15,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger'
 import { EditUserUseCase } from '@/domain/user/application/use-cases/edit-user'
@@ -23,7 +23,6 @@ import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
 import { CheckPolicies } from '@/infra/auth/casl/check-policies.decorator'
 import { UserPresenter } from '../../presenters/user.presenter'
 import { z } from 'zod'
-import { ZodValidationPipe } from '../../pipes/zod-validation.pipe'
 import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
 import { UserErrorFilter } from '../../filters/user-error.filter'
 import { EditUserRequestDto } from '../../dtos/requests/user'
@@ -32,9 +31,14 @@ import {
   InternalServerErrorDto,
   UnprocessableEntityDto,
 } from '../../dtos/error/generic'
-import { UserNotFoundDto, UserForbiddenDto } from '../../dtos/error/user'
+import {
+  UserNotFoundDto,
+  UserForbiddenDto,
+  WrongCredentialsDto,
+} from '../../dtos/error/user'
 import { UserResponseDto } from '../../dtos/response/user'
-import { ParseUuidPipe } from '../../pipes/parse-uuid.pipe'
+import { ParseUuidPipe, ZodValidationPipe } from '../../pipes'
+import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-update-self.handler'
 
 const editUserBodySchema = z.object({
   name: z.string().min(1),
@@ -52,19 +56,19 @@ export class EditUserController {
 
   @Patch(':id')
   @UseGuards(CaslAbilityGuard)
-  @CheckPolicies((ability) => ability.can('update', 'User'))
+  @CheckPolicies(userCanUpdateSelfHandler)
   @HttpCode(200)
   @ApiBody({ type: EditUserRequestDto })
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })
+  @ApiUnauthorizedResponse({ type: WrongCredentialsDto })
   @ApiForbiddenResponse({ type: UserForbiddenDto })
   @ApiNotFoundResponse({ type: UserNotFoundDto })
   @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
   @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
-  @UsePipes(new ZodValidationPipe(editUserBodySchema))
   async handle(
     @Param('id', ParseUuidPipe) id: string,
-    @Body() body: EditUserBodySchema,
+    @Body(new ZodValidationPipe(editUserBodySchema)) body: EditUserBodySchema,
   ) {
     const result = await this.editUserUseCase.execute({ id, ...body })
 

@@ -13,29 +13,35 @@ export const permissions: Record<Role, PermissionsByRole> = {
     can('manage', 'all')
     cannot('update', 'User')
     can('update', 'User', {
-      id: { $eq: user.sub },
+      sub: { $eq: user.sub },
     })
   },
   MANAGER(user, { can }) {
     can('read', 'User')
+    can('list', 'User')
     can('create', 'User')
     can('activate', 'User')
     can('deactivate', 'User')
     can('update-role', 'User')
     can('update', 'User', {
-      id: { $eq: user.sub },
+      sub: { $eq: user.sub },
     })
   },
   SUPERVISOR(user, { can }) {
     can('read', 'User')
+    can('list', 'User')
     can('update', 'User', {
-      id: { $eq: user.sub },
+      sub: { $eq: user.sub },
     })
   },
   OPERATOR(user, { can, cannot }) {
     cannot('read', 'User')
+    cannot('list', 'User')
     can('read', 'User', {
-      id: { $eq: user.sub },
+      sub: { $eq: user.sub },
+    })
+    can('update', 'User', {
+      sub: { $eq: user.sub },
     })
   },
 }

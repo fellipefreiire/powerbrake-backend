@@ -94,4 +94,21 @@ describe('Prisma Users Repository (E2E)', () => {
 
     expect(cached).toBeNull()
   })
+
+  it('should clear caches when deleting the user', async () => {
+    const user = await userFactory.makePrismaUser({})
+
+    const id = user.id.toString()
+
+    await cacheRepository.set(`user:${id}:details`, JSON.stringify(user))
+    await cacheRepository.set('users', JSON.stringify([user]))
+
+    await usersRepository.delete(user)
+
+    const cachedDetails = await cacheRepository.get(`user:${id}:details`)
+    const cachedList = await cacheRepository.get('users')
+
+    expect(cachedDetails).toBeNull()
+    expect(cachedList).toBeNull()
+  })
 })

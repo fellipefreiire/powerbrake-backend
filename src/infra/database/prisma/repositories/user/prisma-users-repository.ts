@@ -54,7 +54,7 @@ export class PrismaUsersRepository implements UsersRepository {
   }
 
   async list({ page }: PaginationParams): Promise<User[]> {
-    const cacheHit = await this.cache.get('users')
+    const cacheHit = await this.cache.get(`users:page:${page}`)
 
     if (cacheHit) {
       const cachedData = JSON.parse(cacheHit)
@@ -70,7 +70,7 @@ export class PrismaUsersRepository implements UsersRepository {
       skip: (page - 1) * 20,
     })
 
-    await this.cache.set('users', JSON.stringify(users))
+    await this.cache.set(`users:page:${page}`, JSON.stringify(users))
 
     return users.map(PrismaUserMapper.toDomain)
   }
@@ -105,7 +105,8 @@ export class PrismaUsersRepository implements UsersRepository {
       this.prisma.user.delete({
         where: { id: data.id },
       }),
-      this.cache.delete(`user:${data.id}:*`),
+      this.cache.delete(`user:${data.id}:details`),
+      this.cache.delete(`users`),
     ])
   }
 }

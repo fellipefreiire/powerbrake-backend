@@ -6,16 +6,22 @@ import { UserFactory } from 'test/factories/make-user'
 import request from 'supertest'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { Role } from '@prisma/client'
+import { randomUUID } from 'node:crypto'
 
-describe('User role (E2E)', () => {
+describe('Edit User Role (E2E)', () => {
   let app: INestApplication
+  let prisma: PrismaService
   let userFactory: UserFactory
   let jwt: JwtService
   let adminUser: User
-  let managerUser: User
-  let supervisorUser: User
+  let adminAccessToken: string
   let operatorUser: User
-  let user: User
+  let operatorAccessToken: string
+  let supervisorUser: User
+  let supervisorAccessToken: string
+  let targetUser: User
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -28,99 +34,188 @@ describe('User role (E2E)', () => {
       type: VersioningType.URI,
     })
 
+    prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     jwt = moduleRef.get(JwtService)
 
     await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
 
     adminUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
       email: 'johndoe@example.com',
       role: 'ADMIN',
-      isActive: true,
     })
 
-    managerUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe2@example.com',
-      role: 'MANAGER',
-      isActive: true,
-    })
-
-    supervisorUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe3@example.com',
-      role: 'SUPERVISOR',
-      isActive: true,
+    adminAccessToken = jwt.sign({
+      sub: adminUser.id.toString(),
+      role: adminUser.role,
     })
 
     operatorUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe4@example.com',
+      email: 'operator.user@example.com',
       role: 'OPERATOR',
-      isActive: true,
     })
 
-    user = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe5@example.com',
-      isActive: true,
+    operatorAccessToken = jwt.sign({
+      sub: operatorUser.id.toString(),
+      role: operatorUser.role,
+    })
+
+    supervisorUser = await userFactory.makePrismaUser({
+      email: 'supervisor.user@example.com',
+      role: 'SUPERVISOR',
+    })
+
+    supervisorAccessToken = jwt.sign({
+      sub: supervisorUser.id.toString(),
+      role: supervisorUser.role,
+    })
+
+    targetUser = await userFactory.makePrismaUser({
+      email: 'target.user@example.com',
+      role: 'OPERATOR',
     })
   })
 
-  describe('[PATCH] /v1/users/role/:id', async () => {
-    it('should be able to edit user role with role ADMIN', async () => {
-      const accessToken = jwt.sign({
-        sub: adminUser.id.toString(),
-        role: adminUser.role,
-      })
+  afterEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+  })
+
+  describe('[PATCH] /v1/users/:id/role', async () => {
+    it('[200] Success → should be able to edit user role', async () => {
+      const payload = {
+        role: Role.MANAGER,
+      }
 
       const response = await request(app.getHttpServer())
-        .patch(`/v1/users/role/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ role: 'SUPERVISOR' })
+        .patch(`/v1/users/${targetUser.id.toString()}/role`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
 
       expect(response.statusCode).toBe(200)
-    })
-
-    it('should be able to edit user role with role MANAGER', async () => {
-      const accessToken = jwt.sign({
-        sub: managerUser.id.toString(),
-        role: managerUser.role,
+      expect(response.body).toEqual({
+        data: expect.objectContaining({
+          id: targetUser.id.toString(),
+          role: Role.MANAGER,
+        }),
       })
 
-      const response = await request(app.getHttpServer())
-        .patch(`/v1/users/role/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ role: 'SUPERVISOR' })
-
-      expect(response.statusCode).toBe(200)
-    })
-    it('should not be able to edit user role with role SUPERVISOR', async () => {
-      const accessToken = jwt.sign({
-        sub: supervisorUser.id.toString(),
-        role: supervisorUser.role,
+      const userOnDatabase = await prisma.user.findUnique({
+        where: {
+          id: targetUser.id.toString(),
+        },
       })
 
+      expect(userOnDatabase?.role).toBe(Role.MANAGER)
+    })
+
+    it('[400] Bad Request → should not be able to edit user role without the right id', async () => {
+      const payload = { role: Role.MANAGER }
+
       const response = await request(app.getHttpServer())
-        .patch(`/v1/users/role/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ role: 'SUPERVISOR' })
+        .patch('/v1/users/invalid-uuid/role')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(400)
+      expect(response.body).toEqual({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Param id must be a valid UUID',
+      })
+    })
+
+    it('[401] Unauthorized → should not be able to edit user role without token', async () => {
+      const payload = { role: Role.MANAGER }
+
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${targetUser.id.toString()}/role`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(401)
+      expect(response.body).toEqual({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Unauthorized',
+      })
+    })
+
+    it('[403] Forbidden → should not be able to edit user role without permission (OPERATOR)', async () => {
+      const payload = { role: Role.MANAGER }
+
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${targetUser.id.toString()}/role`)
+        .set('Authorization', `Bearer ${operatorAccessToken}`)
+        .send(payload)
 
       expect(response.statusCode).toBe(403)
-    })
-    it('should not be able to edit user role with role OPERATOR', async () => {
-      const accessToken = jwt.sign({
-        sub: operatorUser.id.toString(),
-        role: operatorUser.role,
+      expect(response.body).toEqual({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Acesso negado',
       })
+    })
+
+    it('[403] Forbidden → should not be able to edit user role without permission (SUPERVISOR)', async () => {
+      const payload = { role: Role.ADMIN }
 
       const response = await request(app.getHttpServer())
-        .patch(`/v1/users/role/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({ role: 'SUPERVISOR' })
+        .patch(`/v1/users/${targetUser.id.toString()}/role`)
+        .set('Authorization', `Bearer ${supervisorAccessToken}`)
+        .send(payload)
 
       expect(response.statusCode).toBe(403)
+      expect(response.body).toEqual({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Acesso negado',
+      })
+    })
+
+    it('[404] Not Found → should not be able to edit not found user', async () => {
+      const fakeId = randomUUID()
+      const payload = { role: Role.MANAGER }
+
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${fakeId}/role`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(404)
+      expect(response.body).toEqual({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'User not found',
+      })
+    })
+
+    it('[422] Unprocessable Entity → should not be able to edit user with invalid role', async () => {
+      const payload = { role: 'UNKNOWN_ROLE' }
+
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${targetUser.id.toString()}/role`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(422)
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          statusCode: 422,
+          error: 'Unprocessable Entity',
+          message: 'Validation failed',
+        }),
+      )
     })
   })
 })

@@ -15,6 +15,7 @@ import {
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
+  ApiUnauthorizedResponse,
 } from '@nestjs/swagger'
 import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
 import { CheckPolicies } from '@/infra/auth/casl/check-policies.decorator'
@@ -23,7 +24,12 @@ import { UserErrorFilter } from '../../filters/user-error.filter'
 import { ParseUuidPipe } from '../../pipes/parse-uuid.pipe'
 import { UserResponseDto } from '../../dtos/response/user'
 import { BadRequestDto, InternalServerErrorDto } from '../../dtos/error/generic'
-import { UserForbiddenDto, UserNotFoundDto } from '../../dtos/error/user'
+import {
+  UserForbiddenDto,
+  UserNotFoundDto,
+  WrongCredentialsDto,
+} from '../../dtos/error/user'
+import { userCanReadSelfHandler } from '@/infra/auth/casl/handlers/user-can-read-self.handler'
 
 @UseFilters(UserErrorFilter)
 @ApiTags('Users')
@@ -33,11 +39,12 @@ export class FindUserByIdController {
   constructor(private findUserByIdUseCase: FindUserByIdUseCase) {}
 
   @UseGuards(CaslAbilityGuard)
-  @CheckPolicies((ability) => ability.can('read', 'User'))
+  @CheckPolicies(userCanReadSelfHandler)
   @Get(':id')
   @HttpCode(200)
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })
+  @ApiUnauthorizedResponse({ type: WrongCredentialsDto })
   @ApiNotFoundResponse({ type: UserNotFoundDto })
   @ApiForbiddenResponse({ type: UserForbiddenDto })
   @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })

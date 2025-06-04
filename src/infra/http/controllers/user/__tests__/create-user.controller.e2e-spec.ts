@@ -6,12 +6,17 @@ import request from 'supertest'
 import { UserFactory } from 'test/factories/make-user'
 import { JwtService } from '@nestjs/jwt'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import type { User } from '@/domain/user/enterprise/entities/user'
 
-describe('Create user (E2E)', () => {
+const createUserEndpoint = '/v1/users'
+
+describe('Create User (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
   let jwt: JwtService
+  let adminUser: User
+  let adminAccessToken: string
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,105 +36,177 @@ describe('Create user (E2E)', () => {
     await app.init()
   })
 
-  describe('[POST] /v1/users', async () => {
-    it('should be able to create a new user for role ADMIN', async () => {
-      const user = await userFactory.makePrismaUser({
-        email: 'johndoe@example.com',
-        role: 'ADMIN',
-      })
+  afterAll(async () => {
+    await app.close()
+  })
 
-      const accessToken = jwt.sign({ sub: user.id.toString(), role: user.role })
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+
+    adminUser = await userFactory.makePrismaUser({
+      email: 'johndoe@example.com',
+      role: 'ADMIN',
+    })
+
+    adminAccessToken = jwt.sign({
+      sub: adminUser.id.toString(),
+      role: adminUser.role,
+    })
+  })
+
+  afterEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+  })
+
+  describe(`[POST] ${createUserEndpoint}`, async () => {
+    it('[201] Created → should be able to create a new user', async () => {
+      const payload = {
+        name: 'New User',
+        role: 'OPERATOR',
+        password: '123456',
+        email: 'new.user@example.com',
+      }
 
       const response = await request(app.getHttpServer())
-        .post('/v1/users')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          name: 'Created John Doe',
-          role: 'OPERATOR',
-          password: '123456',
-          email: 'createdjohndoe@example.com',
-        })
+        .post(createUserEndpoint)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
 
       expect(response.statusCode).toBe(201)
 
       const userOnDatabase = await prisma.user.findFirst({
         where: {
-          email: 'createdjohndoe@example.com',
+          email: payload.email,
         },
       })
 
       expect(userOnDatabase).toBeTruthy()
     })
 
-    it('should be able to create a new user for role MANAGER', async () => {
-      const user = await userFactory.makePrismaUser({
-        email: 'johndoe2@example.com',
-        role: 'MANAGER',
-      })
-
-      const accessToken = jwt.sign({ sub: user.id.toString(), role: user.role })
-
-      const response = await request(app.getHttpServer())
-        .post('/v1/users')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          name: 'Created John Doe 2',
-          role: 'OPERATOR',
-          password: '123456',
-          email: 'createdjohndoe2@example.com',
-        })
-
-      expect(response.statusCode).toBe(201)
-
-      const userOnDatabase = await prisma.user.findFirst({
-        where: {
-          email: 'createdjohndoe2@example.com',
-        },
-      })
-
-      expect(userOnDatabase).toBeTruthy()
-    })
-
-    it('should block user creation for role SUPERVISOR', async () => {
-      const user = await userFactory.makePrismaUser({
-        email: 'johndoe3@example.com',
-        role: 'SUPERVISOR',
-      })
-
-      const accessToken = jwt.sign({ sub: user.id.toString(), role: user.role })
+    it('[400] Bad Request → should not be able to create user without required params', async () => {
+      const payload = {
+        email: 'missing.name@example.com',
+        password: 'SomePass1!',
+        role: 'OPERATOR',
+      }
 
       const response = await request(app.getHttpServer())
-        .post('/v1/users')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          name: 'Created John Doe 3',
-          role: 'OPERATOR',
-          password: '123456',
-          email: 'createdjohndoe3@gmail.com',
-        })
+        .post(createUserEndpoint)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
 
-      expect(response.statusCode).toBe(403)
+      expect(response.statusCode).toBe(400)
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          statusCode: 400,
+          error: 'Bad Request',
+          message: 'Missing required fields',
+        }),
+      )
     })
 
-    it('should block user creation for role OPERATOR', async () => {
-      const user = await userFactory.makePrismaUser({
-        email: 'johndoe4@example.com',
+    it('[401] Unauthorized → should not be able to create user without token', async () => {
+      const payload = {
+        name: 'User NoAuth',
+        email: 'noauth.user@example.com',
+        password: 'NoAuthPass1!',
+        role: 'OPERATOR',
+      }
+
+      const response = await request(app.getHttpServer())
+        .post(createUserEndpoint)
+        .send(payload)
+
+      expect(response.statusCode).toBe(401)
+      expect(response.body).toEqual({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Unauthorized',
+      })
+    })
+
+    it('[403] Forbidden → should not be able to create user without permission', async () => {
+      const operatorUser = await userFactory.makePrismaUser({
+        email: 'operator.user@example.com',
         role: 'OPERATOR',
       })
 
-      const accessToken = jwt.sign({ sub: user.id.toString(), role: user.role })
+      const operatorAccessToken = jwt.sign({
+        sub: operatorUser.id.toString(),
+        role: operatorUser.role,
+      })
+
+      const payload = {
+        name: 'Attempted User',
+        email: 'attempted@example.com',
+        password: 'AttemptedPass1!',
+        role: 'OPERATOR',
+      }
 
       const response = await request(app.getHttpServer())
-        .post('/v1/users')
-        .set('Authorization', `Bearer ${accessToken}`)
-        .send({
-          name: 'Created John Doe 4',
-          role: 'OPERATOR',
-          password: '123456',
-          email: 'createdjohndoe4@gmail.com',
-        })
+        .post(createUserEndpoint)
+        .set('Authorization', `Bearer ${operatorAccessToken}`)
+        .send(payload)
 
       expect(response.statusCode).toBe(403)
+      expect(response.body).toEqual({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Acesso negado',
+      })
+    })
+
+    it('[409] Conflict → should not be able to create user with same email', async () => {
+      await userFactory.makePrismaUser({
+        email: 'new.user@example.com',
+        role: 'OPERATOR',
+      })
+
+      const payload = {
+        name: 'New User',
+        role: 'OPERATOR',
+        password: '123456',
+        email: 'new.user@example.com',
+      }
+
+      const response = await request(app.getHttpServer())
+        .post(createUserEndpoint)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(409)
+      expect(response.body).toEqual({
+        statusCode: 409,
+        error: 'Conflict',
+        message: `User ${payload.email} already exists`,
+      })
+    })
+
+    it('[422] Unprocessable Entity → should not be able to create user with invalid params', async () => {
+      const payload = {
+        name: 'Invalid Email',
+        email: 'invalid-email',
+        password: 'SomePass1!',
+        role: 'UNKNOWN_ROLE',
+      }
+
+      const response = await request(app.getHttpServer())
+        .post(createUserEndpoint)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(422)
+      expect(response.body).toEqual(
+        expect.objectContaining({
+          statusCode: 422,
+          error: 'Unprocessable Entity',
+          message: 'Validation failed',
+        }),
+      )
     })
   })
 })

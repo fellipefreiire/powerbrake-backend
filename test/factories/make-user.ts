@@ -37,4 +37,18 @@ export class UserFactory {
 
     return user
   }
+
+  async makeManyPrismaUser(data: Partial<UserProps>[] = []): Promise<User[]> {
+    const users = data.map((attrs) => makeUser(attrs))
+
+    if (users.length === 0) {
+      return []
+    }
+
+    await this.prisma.user.createMany({
+      data: users.map(PrismaUserMapper.toPrisma),
+    })
+
+    return users
+  }
 }

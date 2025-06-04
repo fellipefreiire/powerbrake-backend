@@ -6,16 +6,21 @@ import { UserFactory } from 'test/factories/make-user'
 import request from 'supertest'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { randomUUID } from 'node:crypto'
 
-describe('User status (E2E)', () => {
+describe('Edit User Status (E2E)', () => {
   let app: INestApplication
+  let prisma: PrismaService
   let userFactory: UserFactory
   let jwt: JwtService
   let adminUser: User
+  let adminAccessToken: string
   let managerUser: User
-  let supervisorUser: User
+  let managerAccessToken: string
   let operatorUser: User
-  let user: User
+  let operatorAccessToken: string
+  let targetUser: User
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -28,95 +33,157 @@ describe('User status (E2E)', () => {
       type: VersioningType.URI,
     })
 
+    prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     jwt = moduleRef.get(JwtService)
 
     await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
 
     adminUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
       email: 'johndoe@example.com',
       role: 'ADMIN',
-      isActive: true,
+    })
+
+    adminAccessToken = jwt.sign({
+      sub: adminUser.id.toString(),
+      role: adminUser.role,
     })
 
     managerUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe2@example.com',
+      email: 'manager.user@example.com',
       role: 'MANAGER',
-      isActive: true,
     })
 
-    supervisorUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe3@example.com',
-      role: 'SUPERVISOR',
-      isActive: true,
+    managerAccessToken = jwt.sign({
+      sub: managerUser.id.toString(),
+      role: managerUser.role,
     })
 
     operatorUser = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe4@example.com',
+      email: 'operator.user@example.com',
       role: 'OPERATOR',
-      isActive: true,
     })
 
-    user = await userFactory.makePrismaUser({
-      name: 'John Doe',
-      email: 'johndoe5@example.com',
-      isActive: true,
+    operatorAccessToken = jwt.sign({
+      sub: operatorUser.id.toString(),
+      role: operatorUser.role,
+    })
+
+    targetUser = await userFactory.makePrismaUser({
+      email: 'target.user@example.com',
+      role: 'OPERATOR',
     })
   })
 
+  afterEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+  })
+
   describe('[PATCH] /v1/users/status/:id', async () => {
-    it('should be able to activate/deactivate user with role ADMIN', async () => {
-      const accessToken = jwt.sign({
-        sub: adminUser.id.toString(),
-        role: adminUser.role,
-      })
-
+    it('[200] Success → should be able to edit user status (ADMIN)', async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/v1/users/status/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
+        .patch(`/v1/users/${targetUser.id.toString()}/status`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
 
       expect(response.statusCode).toBe(200)
-    })
-
-    it('should be able to activate/deactivate user with role MANAGER', async () => {
-      const accessToken = jwt.sign({
-        sub: managerUser.id.toString(),
-        role: managerUser.role,
+      expect(response.body).toEqual({
+        data: expect.objectContaining({
+          id: targetUser.id.toString(),
+          isActive: false,
+        }),
       })
 
+      const userOnDatabase = await prisma.user.findUnique({
+        where: {
+          id: targetUser.id.toString(),
+        },
+      })
+
+      expect(userOnDatabase?.isActive).toBe(false)
+    })
+
+    it('[200] Success → should be able to edit user status (MANAGER)', async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/v1/users/status/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
+        .patch(`/v1/users/${targetUser.id}/status`)
+        .set('Authorization', `Bearer ${managerAccessToken}`)
 
       expect(response.statusCode).toBe(200)
-    })
-    it('should not be able to activate/deactivate user with role SUPERVISOR', async () => {
-      const accessToken = jwt.sign({
-        sub: supervisorUser.id.toString(),
-        role: supervisorUser.role,
+      expect(response.body).toEqual({
+        data: expect.objectContaining({
+          id: targetUser.id.toString(),
+          isActive: false,
+        }),
       })
 
-      const response = await request(app.getHttpServer())
-        .patch(`/v1/users/status/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
-
-      expect(response.statusCode).toBe(403)
-    })
-    it('should not be able to activate/deactivate user with role OPERATOR', async () => {
-      const accessToken = jwt.sign({
-        sub: operatorUser.id.toString(),
-        role: operatorUser.role,
+      const userOnDatabase = await prisma.user.findUnique({
+        where: { id: targetUser.id.toString() },
       })
+      expect(userOnDatabase?.isActive).toBe(false)
+    })
 
+    it('[400] Bad Request → should not be able to edit user status without the right id', async () => {
       const response = await request(app.getHttpServer())
-        .patch(`/v1/users/status/${user.id}`)
-        .set('Authorization', `Bearer ${accessToken}`)
+        .patch('/v1/users/invalid-uuid/status')
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+
+      expect(response.statusCode).toBe(400)
+      expect(response.body).toEqual({
+        statusCode: 400,
+        error: 'Bad Request',
+        message: 'Param id must be a valid UUID',
+      })
+    })
+
+    it('[401] Unauthorized → should not be able to edit user status without token', async () => {
+      const response = await request(app.getHttpServer()).patch(
+        `/v1/users/${targetUser.id.toString()}/status`,
+      )
+
+      expect(response.statusCode).toBe(401)
+      expect(response.body).toEqual({
+        statusCode: 401,
+        error: 'Unauthorized',
+        message: 'Unauthorized',
+      })
+    })
+
+    it('[403] Forbidden → should not be able to edit user status without permission', async () => {
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${targetUser.id.toString()}/status`)
+        .set('Authorization', `Bearer ${operatorAccessToken}`)
 
       expect(response.statusCode).toBe(403)
+      expect(response.body).toEqual({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Acesso negado',
+      })
+    })
+
+    it('[404] Not Found → should not be able to edit not found user', async () => {
+      const fakeId = randomUUID()
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${fakeId}/status`)
+        .set('Authorization', `Bearer ${adminAccessToken}`)
+
+      expect(response.statusCode).toBe(404)
+      expect(response.body).toEqual({
+        statusCode: 404,
+        error: 'Not Found',
+        message: 'User not found',
+      })
     })
   })
 })
