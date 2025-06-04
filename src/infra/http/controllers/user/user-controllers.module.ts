@@ -16,7 +16,7 @@ import { EditUserRoleUseCase } from '@/domain/user/application/use-cases/edit-us
 import { ListUsersController } from './list-users.controller'
 import { ListUsersUseCase } from '@/domain/user/application/use-cases/list-users'
 import { StorageModule } from '@/infra/storage/storage.module'
-import { UserDatabaseModule } from '@/infra/database/repositories/user/user-database.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 
 @Module({
   imports: [

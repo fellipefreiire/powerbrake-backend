@@ -4,7 +4,7 @@ import { AppModule } from '@/infra/app.module'
 import request from 'supertest'
 import { UserFactory } from 'test/factories/make-user'
 import { JwtService } from '@nestjs/jwt'
-import { UserDatabaseModule } from '@/infra/database/repositories/user/user-database.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 
 describe('List users (E2E)', () => {
   let app: INestApplication

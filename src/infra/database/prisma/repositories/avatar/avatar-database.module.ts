@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common'
-import { PrismaService } from '../../prisma/prisma.service'
 import { AvatarRepository } from '@/shared/avatar/application/repositories/avatar-repository'
 import { PrismaAvatarRepository } from './prisma-avatar-repository'
+import { PrismaService } from '../../prisma.service'
 
 @Module({
   providers: [

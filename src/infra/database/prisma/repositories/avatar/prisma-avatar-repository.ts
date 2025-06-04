@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common'
 import { Avatar } from '@/shared/avatar/enterprise/entities/avatar'
 import { AvatarRepository } from '@/shared/avatar/application/repositories/avatar-repository'
-import { PrismaService } from '../../prisma/prisma.service'
-import { PrismaAvatarMapper } from '../../prisma/mappers/avatar/prisma-avatar.mapper'
+import { PrismaService } from '../../prisma.service'
+import { PrismaAvatarMapper } from '../../mappers/avatar/prisma-avatar.mapper'
 
 @Injectable()
 export class PrismaAvatarRepository implements AvatarRepository {

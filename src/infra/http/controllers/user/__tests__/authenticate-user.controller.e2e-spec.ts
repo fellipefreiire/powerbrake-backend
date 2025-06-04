@@ -4,7 +4,7 @@ import { Test } from '@nestjs/testing'
 import { AppModule } from '@/infra/app.module'
 import { hash } from 'bcryptjs'
 import request from 'supertest'
-import { UserDatabaseModule } from '@/infra/database/repositories/user/user-database.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 
 describe('Authenticate (E2E)', () => {
   let app: INestApplication

@@ -4,8 +4,8 @@ import { AppModule } from '@/infra/app.module'
 import request from 'supertest'
 import { UserFactory } from 'test/factories/make-user'
 import { JwtService } from '@nestjs/jwt'
-import { AvatarDatabaseModule } from '@/infra/database/repositories/avatar/avatar-database.module'
-import { UserDatabaseModule } from '@/infra/database/repositories/user/user-database.module'
+import { AvatarDatabaseModule } from '@/infra/database/prisma/repositories/avatar/avatar-database.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 
 describe('Upload Avatar (E2E)', () => {
   let app: INestApplication

@@ -1,8 +1,8 @@
 import { Injectable } from '@nestjs/common'
-import { PrismaService } from '../../prisma/prisma.service'
 import { UserAvatarRepository } from '@/domain/user/application/repositories/user-avatar-repository'
-import type { UserAvatar } from '@/domain/user/enterprise/entities/user-avatar'
-import { PrismaUserAvatarMapper } from '../../prisma/mappers/user/prisma-user-avatar.mapper'
+import { UserAvatar } from '@/domain/user/enterprise/entities/user-avatar'
+import { PrismaService } from '../../prisma.service'
+import { PrismaUserAvatarMapper } from '../../mappers/user/prisma-user-avatar.mapper'
 
 @Injectable()
 export class PrismaUserAvatarRepository implements UserAvatarRepository {

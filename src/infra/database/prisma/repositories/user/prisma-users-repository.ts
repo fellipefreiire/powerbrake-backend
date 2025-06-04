@@ -1,10 +1,10 @@
 import type { PaginationParams } from '@/core/repositories/pagination-params'
 import type { UsersRepository } from '@/domain/user/application/repositories/user-repository'
-import type { User } from '@/domain/user/enterprise/entities/user'
+import { User } from '@/domain/user/enterprise/entities/user'
 import { Injectable } from '@nestjs/common'
-import { PrismaService } from '../../prisma/prisma.service'
-import { PrismaUserMapper } from '../../prisma/mappers/user/prisma-user.mapper'
 import { CacheRepository } from '@/infra/cache/cache-repository'
+import { PrismaService } from '../../prisma.service'
+import { PrismaUserMapper } from '../../mappers/user/prisma-user.mapper'
 
 @Injectable()
 export class PrismaUsersRepository implements UsersRepository {

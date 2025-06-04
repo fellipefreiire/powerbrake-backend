@@ -5,7 +5,7 @@ import { Test } from '@nestjs/testing'
 import { UserFactory } from 'test/factories/make-user'
 import request from 'supertest'
 import type { User } from '@/domain/user/enterprise/entities/user'
-import { UserDatabaseModule } from '@/infra/database/repositories/user/user-database.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 
 describe('User role (E2E)', () => {
   let app: INestApplication

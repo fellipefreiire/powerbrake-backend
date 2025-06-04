@@ -61,10 +61,7 @@ export class AppErrorFilter implements ExceptionFilter {
   protected mapDomainErrorToStatus(name: string): number {
     return (
       {
-        UserAlreadyExistsError: 409,
-        UserNotFoundError: 404,
         InvalidAvatarTypeError: 400,
-        WrongCredentialsError: 401,
       }[name] ?? 400
     )
   }
