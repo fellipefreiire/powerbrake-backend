@@ -1,7 +1,7 @@
-import { UserPayload } from './../../../auth/jwt.strategy'
 import {
   Controller,
   FileTypeValidator,
+  HttpCode,
   MaxFileSizeValidator,
   ParseFilePipe,
   Post,
@@ -11,24 +11,43 @@ import {
   UseInterceptors,
 } from '@nestjs/common'
 import { FileInterceptor } from '@nestjs/platform-express'
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'
+import {
+  ApiBody,
+  ApiCreatedResponse,
+  ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
+  ApiTags,
+} from '@nestjs/swagger'
 import { JwtAuthGuard } from '@/infra/auth/jwt-auth.guard'
 import { UploadAndCreateAvatarUseCase } from '@/shared/avatar/application/use-cases/upload-and-create-avatar'
-import { CurrentUser } from '@/infra/auth/current-user.decorator'
-import { UserErrorFilter } from '../../filters/user-error.filter'
+import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
+import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
+import { CheckPolicies } from '@/infra/auth/casl/check-policies.decorator'
+import { UploadAvatarRequestDto } from '../../dtos/requests/avatar'
+import { UploadAvatarResponseDto } from '../../dtos/response/avatar'
+import {
+  AvatarForbiddenDto,
+  AvatarUploadFailedDto,
+} from '../../dtos/error/avatar'
+import { AvatarErrorFilter } from '../../filters/avatar-error.filter'
 
-@UseFilters(UserErrorFilter)
-@ApiTags('Users')
-@ApiBearerAuth()
-@Controller({ path: 'users/avatar', version: '1' })
-@UseGuards(JwtAuthGuard)
+@UseFilters(AvatarErrorFilter)
+@ApiTags('Avatar')
+@ServiceTag('avatar')
+@Controller({ path: 'avatar/user', version: '1' })
 export class UploadUserAvatarController {
   constructor(private uploadAndCreateAvatar: UploadAndCreateAvatarUseCase) {}
 
   @Post()
+  @UseGuards(JwtAuthGuard, CaslAbilityGuard)
+  @CheckPolicies((ability) => ability.can('manage', 'Avatar'))
+  @HttpCode(201)
   @UseInterceptors(FileInterceptor('file'))
+  @ApiBody({ type: UploadAvatarRequestDto })
+  @ApiCreatedResponse({ type: UploadAvatarResponseDto })
+  @ApiForbiddenResponse({ type: AvatarForbiddenDto })
+  @ApiInternalServerErrorResponse({ type: AvatarUploadFailedDto })
   async handle(
-    @CurrentUser() user: UserPayload,
     @UploadedFile(
       new ParseFilePipe({
         validators: [
@@ -47,7 +66,6 @@ export class UploadUserAvatarController {
       fileName: file.originalname,
       fileType: file.mimetype,
       body: file.buffer,
-      userId: user.sub,
     })
 
     if (result.isLeft()) {

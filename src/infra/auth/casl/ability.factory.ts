@@ -9,9 +9,11 @@ import { z } from 'zod'
 import { userSubject } from './subjects/user'
 import { permissions } from './permissions'
 import type { User } from './models/user'
+import { avatarSubject } from './subjects/avatar'
 
 export const appAbilitiesSchema = z.union([
   userSubject,
+  avatarSubject,
   z.tuple([z.literal('manage'), z.literal('all')]),
 ])
 type AppAbilities = z.infer<typeof appAbilitiesSchema>

@@ -26,6 +26,7 @@ export const permissions: Record<Role, PermissionsByRole> = {
     can('update', 'User', {
       sub: { $eq: user.sub },
     })
+    can('manage', 'Avatar')
   },
   SUPERVISOR(user, { can }) {
     can('read', 'User')
@@ -33,6 +34,7 @@ export const permissions: Record<Role, PermissionsByRole> = {
     can('update', 'User', {
       sub: { $eq: user.sub },
     })
+    can('manage', 'Avatar')
   },
   OPERATOR(user, { can, cannot }) {
     cannot('read', 'User')
@@ -43,5 +45,6 @@ export const permissions: Record<Role, PermissionsByRole> = {
     can('update', 'User', {
       sub: { $eq: user.sub },
     })
+    can('manage', 'Avatar')
   },
 }

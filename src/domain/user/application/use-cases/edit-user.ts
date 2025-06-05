@@ -3,6 +3,9 @@ import { UsersRepository } from '../repositories/user-repository'
 import { left, right, type Either } from '@/core/either'
 import { UserNotFoundError } from './errors/user-not-found'
 import { User } from '../../enterprise/entities/user'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { UserAvatarWatcher } from './user-avatar-watcher'
+import { UserAvatarRepository } from '../repositories/user-avatar-repository'
 
 type EditUserUseCaseRequest = {
   id: string
@@ -19,11 +22,15 @@ type EditUserUseCaseResponse = Either<
 
 @Injectable()
 export class EditUserUseCase {
-  constructor(private usersRepository: UsersRepository) {}
+  constructor(
+    private usersRepository: UsersRepository,
+    private userAvatarRepository: UserAvatarRepository,
+  ) {}
 
   async execute({
     id,
     name,
+    avatarId,
   }: EditUserUseCaseRequest): Promise<EditUserUseCaseResponse> {
     const user = await this.usersRepository.findById(id)
 
@@ -32,6 +39,23 @@ export class EditUserUseCase {
     }
 
     user.updateName(name)
+
+    const avatarWatcher = new UserAvatarWatcher(user.avatarId ?? null)
+
+    avatarWatcher.update(avatarId ? new UniqueEntityID(avatarId) : null)
+
+    if (avatarWatcher.hasChanged()) {
+      const newAvatarId = avatarWatcher.getUpdatedId()
+
+      if (newAvatarId) {
+        await this.userAvatarRepository.attachAvatarToUser(
+          user.id.toString(),
+          newAvatarId.toString(),
+        )
+      }
+
+      user.updateAvatar(newAvatarId)
+    }
 
     await this.usersRepository.save(user)
 
