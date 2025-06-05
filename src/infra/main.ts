@@ -4,6 +4,7 @@ import { EnvService } from './env/env.service'
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { VersioningType } from '@nestjs/common'
 import { AppErrorFilter } from './http/filters/app-error.filter'
+import helmet from 'helmet'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
@@ -12,6 +13,7 @@ async function bootstrap() {
   })
 
   app.useGlobalFilters(new AppErrorFilter())
+  app.use(helmet())
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Powerbrake API')
