@@ -42,8 +42,8 @@ type AuthenticateBodySchema = z.infer<typeof authenticateBodySchema>
 @UseFilters(UserErrorFilter)
 @ApiTags('Users')
 @ServiceTag('user')
-@Controller({ path: 'users/login', version: '1' })
 @Public()
+@Controller({ path: 'users/login', version: '1' })
 export class AuthenticateUserController {
   constructor(private authenticateUser: AuthenticateUserUseCase) {}
 
