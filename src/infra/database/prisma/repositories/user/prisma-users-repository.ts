@@ -53,8 +53,11 @@ export class PrismaUsersRepository implements UsersRepository {
     return userDetails
   }
 
-  async list({ page }: PaginationParams): Promise<User[]> {
-    const cacheHit = await this.cache.get(`users:page:${page}`)
+  async list({
+    page = 1,
+    perPage = 20,
+  }: PaginationParams): Promise<[User[], number]> {
+    const cacheHit = await this.cache.get(`users:page:${page}:${perPage}`)
 
     if (cacheHit) {
       const cachedData = JSON.parse(cacheHit)
@@ -62,17 +65,18 @@ export class PrismaUsersRepository implements UsersRepository {
       return cachedData.map(PrismaUserMapper.toDomain)
     }
 
-    const users = await this.prisma.user.findMany({
-      orderBy: {
-        createdAt: 'desc',
-      },
-      take: 20,
-      skip: (page - 1) * 20,
-    })
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+      }),
+      this.prisma.user.count(),
+    ])
 
-    await this.cache.set(`users:page:${page}`, JSON.stringify(users))
+    await this.cache.set(`users:page:${page}:${perPage}`, JSON.stringify(users))
 
-    return users.map(PrismaUserMapper.toDomain)
+    return [users.map(PrismaUserMapper.toDomain), total]
   }
 
   async save(user: User): Promise<void> {

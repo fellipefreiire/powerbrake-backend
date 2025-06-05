@@ -16,6 +16,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
+  ApiOperation,
   ApiTags,
 } from '@nestjs/swagger'
 import { JwtAuthGuard } from '@/infra/auth/jwt-auth.guard'
@@ -34,13 +35,14 @@ import { AvatarErrorFilter } from '../../filters/avatar-error.filter'
 @UseFilters(AvatarErrorFilter)
 @ApiTags('Avatar')
 @ServiceTag('avatar')
-@Controller({ path: 'avatar/user', version: '1' })
-export class UploadUserAvatarController {
+@Controller({ path: 'avatar', version: '1' })
+export class UploadAvatarController {
   constructor(private uploadAndCreateAvatar: UploadAndCreateAvatarUseCase) {}
 
   @Post()
   @UseGuards(JwtAuthGuard, CaslAbilityGuard)
   @CheckPolicies((ability) => ability.can('manage', 'Avatar'))
+  @ApiOperation({ summary: 'Upload Avatar' })
   @HttpCode(201)
   @UseInterceptors(FileInterceptor('file'))
   @ApiBody({ type: UploadAvatarRequestDto })

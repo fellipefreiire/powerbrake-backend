@@ -17,7 +17,7 @@ describe('List Users (E2E)', () => {
   let adminAccessToken: string
   let operatorUser: User
   let operatorAccessToken: string
-  const ITEMS_PER_PAGE = 20
+  const ITEMS_PER_PAGE = 10
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -66,10 +66,13 @@ describe('List Users (E2E)', () => {
       role: operatorUser.role,
     })
 
-    const usersToCreate = Array.from({ length: ITEMS_PER_PAGE }, (_, i) => ({
-      name: `User${i + 1}`,
-      email: `user${i + 1}@example.com`,
-    }))
+    const usersToCreate = Array.from(
+      { length: ITEMS_PER_PAGE + 15 },
+      (_, i) => ({
+        name: `User${i + 1}`,
+        email: `user${i + 1}@example.com`,
+      }),
+    )
 
     await userFactory.makeManyPrismaUser(usersToCreate)
   })
@@ -81,24 +84,22 @@ describe('List Users (E2E)', () => {
   })
 
   describe('[GET] /v1/users', async () => {
-    it('[200] Success → should be able to list users', async () => {
+    it('[200] Success → should be able to list users with meta', async () => {
       const response = await request(app.getHttpServer())
         .get('/v1/users')
         .set('Authorization', `Bearer ${adminAccessToken}`)
-        .query({ page: 1 })
 
       expect(response.statusCode).toBe(200)
-      expect(response.body).toEqual({
-        data: expect.arrayContaining(
-          Array.from({ length: ITEMS_PER_PAGE }, () =>
-            expect.objectContaining({
-              id: expect.any(String),
-              email: expect.any(String),
-            }),
-          ),
-        ),
+      expect(response.body.data).toHaveLength(20)
+      expect(response.body.meta).toEqual({
+        total: 27,
+        count: 20,
+        perPage: 20,
+        totalPages: 2,
+        currentPage: 1,
+        nextPage: 2,
+        previousPage: null,
       })
-      expect(response.body?.data).toHaveLength(ITEMS_PER_PAGE)
     })
 
     it('[200] Success should be able to list paginated users', async () => {
@@ -108,7 +109,7 @@ describe('List Users (E2E)', () => {
         .query({ page: 2 })
 
       expect(response.statusCode).toBe(200)
-      expect(response.body.data).toHaveLength(2)
+      expect(response.body.data).toHaveLength(7)
       response.body.data.forEach((user: User) => {
         expect(user).toEqual(
           expect.objectContaining({

@@ -14,6 +14,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger'
@@ -42,6 +43,7 @@ export class FindUserByIdController {
   @CheckPolicies(userCanReadSelfHandler)
   @Get(':id')
   @HttpCode(200)
+  @ApiOperation({ summary: 'Find user by id' })
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })
   @ApiUnauthorizedResponse({ type: WrongCredentialsDto })

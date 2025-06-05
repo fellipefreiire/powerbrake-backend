@@ -14,6 +14,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -58,6 +59,7 @@ export class EditUserRoleController {
   @UseGuards(CaslAbilityGuard)
   @CheckPolicies((ability) => ability.can('update-role', 'User'))
   @HttpCode(200)
+  @ApiOperation({ summary: 'Edit user role' })
   @ApiBody({ type: EditUserRoleRequestDto })
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })

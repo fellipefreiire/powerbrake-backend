@@ -12,6 +12,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
 } from '@nestjs/swagger'
@@ -44,6 +45,7 @@ export class EditUserStatusController {
   )
   @Patch(':id/status')
   @HttpCode(200)
+  @ApiOperation({ summary: 'Edit user status' })
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })
   @ApiUnauthorizedResponse({ type: WrongCredentialsDto })

@@ -14,6 +14,7 @@ import {
   ApiInternalServerErrorResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -58,6 +59,7 @@ export class EditUserController {
   @UseGuards(CaslAbilityGuard)
   @CheckPolicies(userCanUpdateSelfHandler)
   @HttpCode(200)
+  @ApiOperation({ summary: 'Edit user' })
   @ApiBody({ type: EditUserRequestDto })
   @ApiOkResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })

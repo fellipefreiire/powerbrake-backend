@@ -21,6 +21,7 @@ import {
   ApiCreatedResponse,
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
+  ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -61,6 +62,7 @@ export class CreateUserController {
   @CheckPolicies((ability) => ability.can('create', 'User'))
   @Post()
   @HttpCode(201)
+  @ApiOperation({ summary: 'Create user' })
   @ApiBody({ type: CreateUserRequestDto })
   @ApiCreatedResponse({ type: UserResponseDto })
   @ApiBadRequestResponse({ type: BadRequestDto })

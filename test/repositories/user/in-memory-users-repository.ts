@@ -17,12 +17,16 @@ export class InMemoryUsersRepository implements UsersRepository {
     return user || null
   }
 
-  async list({ page }: PaginationParams) {
+  async list({ page = 1, perPage = 20 }: PaginationParams) {
+    const total = this.items.length
+    const startIndex = (page - 1) * perPage
+    const endIndex = startIndex + perPage
+
     const users = this.items
       .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-      .slice((page - 1) * 20, page * 20)
+      .slice(startIndex, endIndex)
 
-    return users
+    return [users, total] as [User[], number]
   }
 
   async create(user: User) {

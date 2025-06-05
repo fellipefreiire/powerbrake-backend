@@ -71,7 +71,7 @@ describe('Upload Avatar (E2E)', () => {
       const accessToken = jwt.sign({ sub: user.id.toString(), role: user.role })
 
       const response = await request(app.getHttpServer())
-        .post('/v1/avatar/user')
+        .post('/v1/avatar')
         .set('Authorization', `Bearer ${accessToken}`)
         .attach('file', './test/e2e/sample-upload.png')
 
@@ -87,7 +87,7 @@ describe('Upload Avatar (E2E)', () => {
       })
 
       const res = await request(app.getHttpServer())
-        .post('/v1/avatar/user')
+        .post('/v1/avatar')
         .set('Authorization', `Bearer ${adminAccessToken}`)
         .attach('file', './test/e2e/sample-upload.png')
         .expect(500)

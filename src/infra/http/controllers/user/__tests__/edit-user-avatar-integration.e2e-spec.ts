@@ -49,7 +49,7 @@ describe('Edit User Avatar (E2E)', () => {
     })
 
     const avatarUploadRes = await request(app.getHttpServer())
-      .post('/v1/avatar/user')
+      .post('/v1/avatar')
       .set('Authorization', `Bearer ${accessToken}`)
       .attach('file', './test/e2e/sample-upload.png')
 

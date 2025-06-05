@@ -16,6 +16,7 @@ import {
   ApiForbiddenResponse,
   ApiInternalServerErrorResponse,
   ApiOkResponse,
+  ApiOperation,
   ApiTags,
   ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
@@ -48,6 +49,7 @@ export class AuthenticateUserController {
 
   @Post()
   @HttpCode(200)
+  @ApiOperation({ summary: 'Authenticate user' })
   @ApiBody({ type: AuthenticateUserRequestDto })
   @ApiOkResponse({
     description: 'Success',
