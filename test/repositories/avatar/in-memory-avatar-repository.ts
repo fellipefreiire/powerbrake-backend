@@ -21,7 +21,6 @@ export class InMemoryAvatarRepository implements AvatarRepository {
     }
   }
 
-  // Método auxiliar opcional para debug ou testes
   async list(): Promise<Avatar[]> {
     return this.items
   }

@@ -15,7 +15,7 @@ describe('Find User By Id', () => {
     sut = new FindUserByEmailUseCase(inMemoryUsersRepository)
   })
 
-  it('should be able to find a user by id', async () => {
+  it('should be able to find a user by email', async () => {
     const user = makeUser(
       {
         email: 'johndoe@example.com',
