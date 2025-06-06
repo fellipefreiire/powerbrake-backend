@@ -1,0 +1,18 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔍 Verificando testes e exclusões..."
+
+# Executa os testes unitários
+npm run test || exit 1
+
+# Executa os testes e2e
+npm run test:e2e || exit 1
+
+# Verifica se há testes com .only (test.only ou describe.only)
+if grep -r --include="*.ts" --exclude-dir="node_modules" -E "test\.only|describe\.only" src/; then
+  echo "❌ 'test.only' ou 'describe.only' encontrado. Remova antes de fazer push."
+  exit 1
+fi
+
+echo "✅ Pre-push finalizado com sucesso."
