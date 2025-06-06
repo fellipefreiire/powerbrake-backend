@@ -1,20 +1,23 @@
 import { AppModule } from '@/infra/app.module'
 import { VersioningType, type INestApplication } from '@nestjs/common'
-import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import { UserFactory } from 'test/factories/make-user'
 import request from 'supertest'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { TokenService } from '@/infra/auth/token.service'
 
 describe('Edit User (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let jwt: JwtService
+  let token: TokenService
   let adminUser: User
-  let adminAccessToken: string
+  let adminAccessToken: {
+    token: string
+    expiresIn: number
+  }
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -29,7 +32,7 @@ describe('Edit User (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    jwt = moduleRef.get(JwtService)
+    token = moduleRef.get(TokenService)
 
     await app.init()
   })
@@ -48,7 +51,7 @@ describe('Edit User (E2E)', () => {
       role: 'ADMIN',
     })
 
-    adminAccessToken = jwt.sign({
+    adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
     })
@@ -68,7 +71,7 @@ describe('Edit User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${adminUser.id.toString()}`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(200)
@@ -88,7 +91,7 @@ describe('Edit User (E2E)', () => {
     it('[400] Bad Request → should not be able to edit user without required params', async () => {
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${adminUser.id.toString()}`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send({})
 
       expect(response.statusCode).toBe(400)
@@ -125,7 +128,7 @@ describe('Edit User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${operatorUser.id.toString()}`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(403)
@@ -139,7 +142,7 @@ describe('Edit User (E2E)', () => {
     it('[422] Unprocessable Entity → should not be able to edit user with invalid params', async () => {
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${adminUser.id.toString()}`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send({ name: '' })
 
       expect(response.statusCode).toBe(422)

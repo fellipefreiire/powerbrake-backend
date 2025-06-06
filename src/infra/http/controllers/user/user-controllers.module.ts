@@ -17,6 +17,11 @@ import { ListUsersController } from './list-users.controller'
 import { ListUsersUseCase } from '@/domain/user/application/use-cases/list-users'
 import { StorageModule } from '@/infra/storage/storage.module'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { RefreshTokenController } from './refresh-token.controller'
+import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/refresh-user-token'
+import { AuthModule } from '@/infra/auth/auth.module'
+import { LogoutUserController } from './logout-user.controller'
+import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-user'
 
 @Module({
   imports: [
@@ -24,6 +29,7 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
     CryptographyModule,
     CaslAbilityModule,
     StorageModule,
+    AuthModule,
   ],
   controllers: [
     AuthenticateUserController,
@@ -33,6 +39,8 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
     EditUserController,
     FindUserByIdController,
     ListUsersController,
+    RefreshTokenController,
+    LogoutUserController,
   ],
   providers: [
     AuthenticateUserUseCase,
@@ -42,6 +50,8 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
     EditUserUseCase,
     FindUserByIdUseCase,
     ListUsersUseCase,
+    RefreshUserTokenUseCase,
+    LogoutUserUseCase,
   ],
 })
 export class UserControllersModule {}

@@ -3,20 +3,23 @@ import { Test } from '@nestjs/testing'
 import { AppModule } from '@/infra/app.module'
 import request from 'supertest'
 import { UserFactory } from 'test/factories/make-user'
-import { JwtService } from '@nestjs/jwt'
 import { AvatarDatabaseModule } from '@/infra/database/prisma/repositories/avatar/avatar-database.module'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import { User } from '@/domain/user/enterprise/entities/user'
 import { Uploader } from '@/shared/avatar/application/storage/uploader'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { TokenService } from '@/infra/auth/token.service'
 
 describe('Upload Avatar (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let jwt: JwtService
+  let token: TokenService
   let adminUser: User
-  let adminAccessToken: string
+  let adminAccessToken: {
+    token: string
+    expiresIn: number
+  }
   let uploader: Uploader
 
   beforeAll(async () => {
@@ -32,7 +35,7 @@ describe('Upload Avatar (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    jwt = moduleRef.get(JwtService)
+    token = moduleRef.get(TokenService)
     uploader = moduleRef.get(Uploader)
 
     await app.init()
@@ -52,7 +55,7 @@ describe('Upload Avatar (E2E)', () => {
       role: 'ADMIN',
     })
 
-    adminAccessToken = jwt.sign({
+    adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
     })
@@ -66,13 +69,9 @@ describe('Upload Avatar (E2E)', () => {
 
   describe('[POST] /v1/users/avatar', async () => {
     it('[201] Created → should create user avatar', async () => {
-      const user = await userFactory.makePrismaUser({})
-
-      const accessToken = jwt.sign({ sub: user.id.toString(), role: user.role })
-
       const response = await request(app.getHttpServer())
         .post('/v1/avatar')
-        .set('Authorization', `Bearer ${accessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .attach('file', './test/e2e/sample-upload.png')
 
       expect(response.statusCode).toBe(201)
@@ -88,7 +87,7 @@ describe('Upload Avatar (E2E)', () => {
 
       const res = await request(app.getHttpServer())
         .post('/v1/avatar')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .attach('file', './test/e2e/sample-upload.png')
         .expect(500)
 

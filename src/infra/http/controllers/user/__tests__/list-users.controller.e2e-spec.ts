@@ -3,20 +3,26 @@ import { Test } from '@nestjs/testing'
 import { AppModule } from '@/infra/app.module'
 import request from 'supertest'
 import { UserFactory } from 'test/factories/make-user'
-import { JwtService } from '@nestjs/jwt'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { TokenService } from '@/infra/auth/token.service'
 
 describe('List Users (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let jwt: JwtService
+  let token: TokenService
   let adminUser: User
-  let adminAccessToken: string
+  let adminAccessToken: {
+    token: string
+    expiresIn: number
+  }
   let operatorUser: User
-  let operatorAccessToken: string
+  let operatorAccessToken: {
+    token: string
+    expiresIn: number
+  }
   const ITEMS_PER_PAGE = 10
 
   beforeAll(async () => {
@@ -32,7 +38,7 @@ describe('List Users (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    jwt = moduleRef.get(JwtService)
+    token = moduleRef.get(TokenService)
 
     await app.init()
   })
@@ -51,7 +57,7 @@ describe('List Users (E2E)', () => {
       role: 'ADMIN',
     })
 
-    adminAccessToken = jwt.sign({
+    adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
     })
@@ -61,7 +67,7 @@ describe('List Users (E2E)', () => {
       role: 'OPERATOR',
     })
 
-    operatorAccessToken = jwt.sign({
+    operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
     })
@@ -87,7 +93,7 @@ describe('List Users (E2E)', () => {
     it('[200] Success → should be able to list users with meta', async () => {
       const response = await request(app.getHttpServer())
         .get('/v1/users')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
 
       expect(response.statusCode).toBe(200)
       expect(response.body.data).toHaveLength(20)
@@ -105,7 +111,7 @@ describe('List Users (E2E)', () => {
     it('[200] Success should be able to list paginated users', async () => {
       const response = await request(app.getHttpServer())
         .get('/v1/users')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .query({ page: 2 })
 
       expect(response.statusCode).toBe(200)
@@ -136,7 +142,7 @@ describe('List Users (E2E)', () => {
     it('[403] Forbidden → should not be able to list users without permission', async () => {
       const response = await request(app.getHttpServer())
         .get('/v1/users')
-        .set('Authorization', `Bearer ${operatorAccessToken}`)
+        .set('Authorization', `Bearer ${operatorAccessToken.token}`)
         .query({ page: 1 })
 
       expect(response.statusCode).toBe(403)
@@ -150,7 +156,7 @@ describe('List Users (E2E)', () => {
     it('[422] Unprocessable Entity → should not be able to list users with invalid query', async () => {
       const response = await request(app.getHttpServer())
         .get('/v1/users')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .query({ page: 'abc' })
 
       expect(response.statusCode).toBe(422)

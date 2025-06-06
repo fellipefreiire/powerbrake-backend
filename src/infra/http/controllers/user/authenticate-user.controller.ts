@@ -43,11 +43,11 @@ type AuthenticateBodySchema = z.infer<typeof authenticateBodySchema>
 @ApiTags('Users')
 @ServiceTag('user')
 @Public()
-@Controller({ path: 'users/login', version: '1' })
+@Controller({ path: 'users', version: '1' })
 export class AuthenticateUserController {
   constructor(private authenticateUser: AuthenticateUserUseCase) {}
 
-  @Post()
+  @Post('login')
   @HttpCode(200)
   @ApiOperation({ summary: 'Authenticate user' })
   @ApiBody({ type: AuthenticateUserRequestDto })
@@ -69,6 +69,7 @@ export class AuthenticateUserController {
 
     return {
       access_token: result.value.accessToken,
+      refresh_token: result.value.refreshToken,
       expiresIn: result.value.expiresIn,
     }
   }

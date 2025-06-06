@@ -16,7 +16,6 @@ import { PrismaHealthIndicator } from '../indicators/prisma-health.indicator'
 import { RedisHealthIndicator } from '../indicators/redis-health.indicator'
 import { S3HealthIndicator } from '../indicators/s3-health.indicator'
 import { HealthCheckResponseDto } from '../dtos/common/health-check-response.dto'
-// Supondo que os DTOs estão em:
 
 @ApiTags('Health')
 @ServiceTag('health')
@@ -33,18 +32,17 @@ export class HealthController {
   @Get()
   @HealthCheck()
   @ApiOperation({
-    summary: 'Verifica a saúde da aplicação e seus serviços dependentes.',
+    summary: 'Check application health and its dependent services.',
     description:
-      'Retorna o status de cada componente monitorado (banco de dados, Redis, S3). O status geral será "ok" se todos os componentes estiverem saudáveis, ou "error" se algum componente falhar.',
+      'Returns the status of monitored components (database, Redis, S3). Overall status will be "ok" if all components are healthy, or "error" if any component fails.',
   })
   @ApiOkResponse({
-    description:
-      'Todos os serviços estão operacionais e a aplicação está saudável.',
+    description: 'All services are operational and the application is healthy.',
     type: HealthCheckResponseDto,
   })
   @ApiServiceUnavailableResponse({
     description:
-      'Um ou mais serviços estão indisponíveis ou a aplicação não está saudável.',
+      'One or more services are unavailable or the application is unhealthy.',
     type: HealthCheckResponseDto,
   })
   check(): Promise<HealthCheckResult> {

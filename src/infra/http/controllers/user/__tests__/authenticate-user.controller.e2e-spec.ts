@@ -60,11 +60,18 @@ describe('Authenticate User (E2E)', () => {
 
       expect(response.statusCode).toBe(200)
       expect(response.body).toEqual({
-        access_token: expect.any(String),
+        access_token: expect.objectContaining({
+          expiresIn: expect.any(Number),
+          token: expect.any(String),
+        }),
+        refresh_token: expect.objectContaining({
+          expiresIn: expect.any(Number),
+          token: expect.any(String),
+        }),
         expiresIn: expect.any(Number),
       })
 
-      const payload = jwt.verify(response.body.access_token)
+      const payload = jwt.verify(response.body.access_token.token)
       expect(payload.sub).toBe(user.id.toString())
     })
 

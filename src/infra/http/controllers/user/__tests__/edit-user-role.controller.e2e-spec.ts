@@ -1,6 +1,5 @@
 import { AppModule } from '@/infra/app.module'
 import { VersioningType, type INestApplication } from '@nestjs/common'
-import { JwtService } from '@nestjs/jwt'
 import { Test } from '@nestjs/testing'
 import { UserFactory } from 'test/factories/make-user'
 import request from 'supertest'
@@ -9,18 +8,28 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { Role } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
+import { TokenService } from '@/infra/auth/token.service'
 
 describe('Edit User Role (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let jwt: JwtService
+  let token: TokenService
   let adminUser: User
-  let adminAccessToken: string
+  let adminAccessToken: {
+    token: string
+    expiresIn: number
+  }
   let operatorUser: User
-  let operatorAccessToken: string
+  let operatorAccessToken: {
+    token: string
+    expiresIn: number
+  }
   let supervisorUser: User
-  let supervisorAccessToken: string
+  let supervisorAccessToken: {
+    token: string
+    expiresIn: number
+  }
   let targetUser: User
 
   beforeAll(async () => {
@@ -36,7 +45,7 @@ describe('Edit User Role (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    jwt = moduleRef.get(JwtService)
+    token = moduleRef.get(TokenService)
 
     await app.init()
   })
@@ -55,7 +64,7 @@ describe('Edit User Role (E2E)', () => {
       role: 'ADMIN',
     })
 
-    adminAccessToken = jwt.sign({
+    adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
     })
@@ -65,7 +74,7 @@ describe('Edit User Role (E2E)', () => {
       role: 'OPERATOR',
     })
 
-    operatorAccessToken = jwt.sign({
+    operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
     })
@@ -75,7 +84,7 @@ describe('Edit User Role (E2E)', () => {
       role: 'SUPERVISOR',
     })
 
-    supervisorAccessToken = jwt.sign({
+    supervisorAccessToken = await token.generateAccessToken({
       sub: supervisorUser.id.toString(),
       role: supervisorUser.role,
     })
@@ -100,7 +109,7 @@ describe('Edit User Role (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${targetUser.id.toString()}/role`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(200)
@@ -125,7 +134,7 @@ describe('Edit User Role (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch('/v1/users/invalid-uuid/role')
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(400)
@@ -156,7 +165,7 @@ describe('Edit User Role (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${targetUser.id.toString()}/role`)
-        .set('Authorization', `Bearer ${operatorAccessToken}`)
+        .set('Authorization', `Bearer ${operatorAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(403)
@@ -172,7 +181,7 @@ describe('Edit User Role (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${targetUser.id.toString()}/role`)
-        .set('Authorization', `Bearer ${supervisorAccessToken}`)
+        .set('Authorization', `Bearer ${supervisorAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(403)
@@ -189,7 +198,7 @@ describe('Edit User Role (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${fakeId}/role`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(404)
@@ -205,7 +214,7 @@ describe('Edit User Role (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${targetUser.id.toString()}/role`)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(422)

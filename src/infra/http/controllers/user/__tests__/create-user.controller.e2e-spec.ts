@@ -4,9 +4,9 @@ import { Test } from '@nestjs/testing'
 import { AppModule } from '@/infra/app.module'
 import request from 'supertest'
 import { UserFactory } from 'test/factories/make-user'
-import { JwtService } from '@nestjs/jwt'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import type { User } from '@/domain/user/enterprise/entities/user'
+import { TokenService } from '@/infra/auth/token.service'
 
 const createUserEndpoint = '/v1/users'
 
@@ -14,9 +14,17 @@ describe('Create User (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let jwt: JwtService
+  let token: TokenService
   let adminUser: User
-  let adminAccessToken: string
+  let adminAccessToken: {
+    token: string
+    expiresIn: number
+  }
+  let operatorUser: User
+  let operatorAccessToken: {
+    token: string
+    expiresIn: number
+  }
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,7 +39,7 @@ describe('Create User (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    jwt = moduleRef.get(JwtService)
+    token = moduleRef.get(TokenService)
 
     await app.init()
   })
@@ -50,9 +58,19 @@ describe('Create User (E2E)', () => {
       role: 'ADMIN',
     })
 
-    adminAccessToken = jwt.sign({
+    adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+    })
+
+    operatorUser = await userFactory.makePrismaUser({
+      email: 'operator.user@example.com',
+      role: 'OPERATOR',
+    })
+
+    operatorAccessToken = await token.generateAccessToken({
+      sub: operatorUser.id.toString(),
+      role: operatorUser.role,
     })
   })
 
@@ -73,7 +91,7 @@ describe('Create User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .post(createUserEndpoint)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(201)
@@ -96,7 +114,7 @@ describe('Create User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .post(createUserEndpoint)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(400)
@@ -130,16 +148,6 @@ describe('Create User (E2E)', () => {
     })
 
     it('[403] Forbidden → should not be able to create user without permission', async () => {
-      const operatorUser = await userFactory.makePrismaUser({
-        email: 'operator.user@example.com',
-        role: 'OPERATOR',
-      })
-
-      const operatorAccessToken = jwt.sign({
-        sub: operatorUser.id.toString(),
-        role: operatorUser.role,
-      })
-
       const payload = {
         name: 'Attempted User',
         email: 'attempted@example.com',
@@ -149,7 +157,7 @@ describe('Create User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .post(createUserEndpoint)
-        .set('Authorization', `Bearer ${operatorAccessToken}`)
+        .set('Authorization', `Bearer ${operatorAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(403)
@@ -175,7 +183,7 @@ describe('Create User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .post(createUserEndpoint)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(409)
@@ -196,7 +204,7 @@ describe('Create User (E2E)', () => {
 
       const response = await request(app.getHttpServer())
         .post(createUserEndpoint)
-        .set('Authorization', `Bearer ${adminAccessToken}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
         .send(payload)
 
       expect(response.statusCode).toBe(422)

@@ -7,6 +7,12 @@ export class JwtEncrypter implements Encrypter {
   constructor(private jwtService: JwtService) {}
 
   encrypt(payload: Record<string, unknown>): Promise<string> {
-    return this.jwtService.signAsync(payload)
+    const iat = Math.floor(Date.now() / 1000)
+    const exp = iat + 60 * 60
+    return this.jwtService.signAsync({
+      ...payload,
+      iat,
+      exp,
+    })
   }
 }

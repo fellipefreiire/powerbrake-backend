@@ -7,11 +7,13 @@ import {
 import { WrongCredentialsError } from '@/domain/user/application/use-cases/errors/wrong-credentials-error'
 import { UserInactiveError } from '@/domain/user/application/use-cases/errors/user-inactive-error'
 import { InvalidRoleTransitionError } from '@/domain/user/application/use-cases/errors/invalid-role-transition-error'
+import { UserUnauthorizedError } from '@/domain/user/application/use-cases/errors/user-unauthorized-error'
 
 @Catch()
 export class UserErrorFilter extends AppErrorFilter {
   protected override mapDomainErrorToStatus(name: string): number {
     switch (name) {
+      case UserUnauthorizedError.name:
       case WrongCredentialsError.name:
         return 401
       case UserInactiveError.name:

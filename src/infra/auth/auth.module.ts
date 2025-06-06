@@ -6,6 +6,10 @@ import { APP_GUARD } from '@nestjs/core'
 import { JwtAuthGuard } from './jwt-auth.guard'
 import { EnvService } from '../env/env.service'
 import { EnvModule } from '../env/env.module'
+import { TokenService } from './token.service'
+import { RefreshTokenRepository } from './refresh-token.repository'
+import { CryptographyModule } from '../cryptography/cryptography.module'
+import { CacheModule } from '../cache/cache.module'
 
 @Module({
   imports: [
@@ -19,20 +23,25 @@ import { EnvModule } from '../env/env.module'
         const publicKey = env.get('JWT_PUBLIC_KEY')
 
         return {
-          signOptions: { algorithm: 'RS256', expiresIn: '1h' },
+          signOptions: { algorithm: 'RS256' },
           privateKey: Buffer.from(privateKey, 'base64'),
           publicKey: Buffer.from(publicKey, 'base64'),
         }
       },
     }),
+    CryptographyModule,
+    CacheModule,
   ],
   providers: [
     JwtStrategy,
     EnvService,
+    TokenService,
+    RefreshTokenRepository,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
   ],
+  exports: [TokenService, RefreshTokenRepository],
 })
 export class AuthModule {}

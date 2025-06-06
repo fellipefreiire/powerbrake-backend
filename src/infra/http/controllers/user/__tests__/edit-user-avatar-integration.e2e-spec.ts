@@ -5,13 +5,13 @@ import { AppModule } from '@/infra/app.module'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { UserFactory } from 'test/factories/make-user'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
-import { JwtService } from '@nestjs/jwt'
+import { TokenService } from '@/infra/auth/token.service'
 
 describe('Edit User Avatar (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let jwt: JwtService
+  let token: TokenService
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -26,7 +26,7 @@ describe('Edit User Avatar (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    jwt = moduleRef.get(JwtService)
+    token = moduleRef.get(TokenService)
 
     await app.init()
   })
@@ -43,21 +43,21 @@ describe('Edit User Avatar (E2E)', () => {
       role: 'OPERATOR',
     })
 
-    const accessToken = jwt.sign({
+    const accessToken = await token.generateAccessToken({
       sub: user.id.toString(),
       role: user.role,
     })
 
     const avatarUploadRes = await request(app.getHttpServer())
       .post('/v1/avatar')
-      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Authorization', `Bearer ${accessToken.token}`)
       .attach('file', './test/e2e/sample-upload.png')
 
     const avatarId = avatarUploadRes.body.data
 
     await request(app.getHttpServer())
       .patch(`/v1/users/${user.id}`)
-      .set('Authorization', `Bearer ${accessToken}`)
+      .set('Authorization', `Bearer ${accessToken.token}`)
       .send({
         name: 'Updated User',
         avatarId,

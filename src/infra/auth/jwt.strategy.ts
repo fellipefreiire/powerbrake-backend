@@ -8,9 +8,20 @@ import { roleSchema } from './casl/roles'
 const tokenPayloadSchema = z.object({
   sub: z.string().uuid(),
   role: roleSchema,
+  iat: z.number(),
+  exp: z.number(),
+})
+
+export const refreshTokenPayloadSchema = z.object({
+  sub: z.string().uuid(),
+  role: roleSchema,
+  iat: z.number(),
+  exp: z.number(),
+  jti: z.string().uuid(),
 })
 
 export type UserPayload = z.infer<typeof tokenPayloadSchema>
+export type RefreshTokenPayload = z.infer<typeof refreshTokenPayloadSchema>
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {

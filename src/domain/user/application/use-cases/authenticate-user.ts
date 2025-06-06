@@ -1,10 +1,11 @@
 import { left, right, type Either } from '@/core/either'
 import { UsersRepository } from '@/domain/user/application/repositories/user-repository'
 import { Injectable } from '@nestjs/common'
-import { Encrypter } from '../../../../shared/cryptography/encrypter'
 import { WrongCredentialsError } from './errors/wrong-credentials-error'
 import { HashComparer } from '../../../../shared/cryptography/hash-comparer'
 import { UserInactiveError } from './errors/user-inactive-error'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { TokenService } from '@/infra/auth/token.service'
 
 type AuthenticateUserUseCaseRequest = {
   email: string
@@ -14,19 +15,25 @@ type AuthenticateUserUseCaseRequest = {
 type AuthenticateUserUseCaseResponse = Either<
   WrongCredentialsError | UserInactiveError,
   {
-    accessToken: string
+    accessToken: {
+      token: string
+      expiresIn: number
+    }
+    refreshToken: {
+      token: string
+      expiresIn: number
+    }
     expiresIn: number
   }
 >
-
-export const expiresIn = 60 * 60 // 1 hour(s)
 
 @Injectable()
 export class AuthenticateUserUseCase {
   constructor(
     private usersRepository: UsersRepository,
     private hashComparar: HashComparer,
-    private encrypter: Encrypter,
+    private tokenService: TokenService,
+    private refreshTokenRepository: RefreshTokenRepository,
   ) {}
 
   async execute({
@@ -52,14 +59,23 @@ export class AuthenticateUserUseCase {
       return left(new WrongCredentialsError())
     }
 
-    const accessToken = await this.encrypter.encrypt({
+    const accessToken = await this.tokenService.generateAccessToken({
       sub: user.id.toString(),
       role: user.role,
     })
 
+    const jti = await this.refreshTokenRepository.create(user.id.toString())
+
+    const refreshToken = await this.tokenService.generateRefreshToken({
+      sub: user.id.toString(),
+      role: user.role,
+      jti,
+    })
+
     return right({
       accessToken,
-      expiresIn: Math.floor(Date.now() / 1000) + expiresIn,
+      refreshToken,
+      expiresIn: accessToken.expiresIn,
     })
   }
 }
