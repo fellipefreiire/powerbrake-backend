@@ -26,7 +26,7 @@ import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
 @ServiceTag('user')
 @Controller({ path: 'users', version: '1' })
 export class LogoutUserController {
-  constructor(private logoutUser: LogoutUserUseCase) {}
+  constructor(private logoutUserUseCase: LogoutUserUseCase) {}
 
   @Post('logout')
   @UseGuards(JwtAuthGuard)
@@ -43,7 +43,7 @@ export class LogoutUserController {
     type: InternalServerErrorDto,
   })
   async handle(@CurrentUser() user: RefreshTokenPayload) {
-    const result = await this.logoutUser.execute({ jti: user.jti })
+    const result = await this.logoutUserUseCase.execute({ jti: user.jti })
 
     if (result.isLeft()) throw result.value
   }

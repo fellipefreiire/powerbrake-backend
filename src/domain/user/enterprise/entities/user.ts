@@ -78,6 +78,11 @@ export class User extends AggregateRoot<UserProps> {
     this.touch()
   }
 
+  updatePassword(hash: string) {
+    this.props.passwordHash = hash
+    this.touch()
+  }
+
   private touch() {
     this.props.updatedAt = new Date()
   }

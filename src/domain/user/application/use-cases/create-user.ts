@@ -5,7 +5,7 @@ import { UserAlreadyExistsError } from './errors/user-already-exists-error'
 import { Injectable } from '@nestjs/common'
 import { HashGenerator } from '@/shared/cryptography/hash-generator'
 import type { Role } from '@prisma/client'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 import { UserAddressRepository } from '../repositories/user-address-repository'
 import { UserAddressList } from '../../enterprise/entities/user-address-list'
 

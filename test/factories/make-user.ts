@@ -5,7 +5,7 @@ import { Injectable } from '@nestjs/common'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { PrismaUserMapper } from '@/infra/database/prisma/mappers/user/prisma-user.mapper'
 import { UserAddressList } from '@/domain/user/enterprise/entities/user-address-list'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 
 export function makeUser(
   override: Partial<Omit<UserProps, 'addresses'>> & {

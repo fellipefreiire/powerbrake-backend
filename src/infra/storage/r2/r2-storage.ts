@@ -1,5 +1,4 @@
 import { Uploader, type UploadParams } from '@/shared/storage/uploader'
-import { EnvService } from '../env/env.service'
 import {
   DeleteObjectCommand,
   PutObjectCommand,
@@ -7,6 +6,7 @@ import {
 } from '@aws-sdk/client-s3'
 import { randomUUID } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
+import { EnvService } from '@/infra/env/env.service'
 
 @Injectable()
 export class R2Storage implements Uploader {

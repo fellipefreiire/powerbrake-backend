@@ -1,0 +1,70 @@
+import { describe, it, expect, beforeEach } from 'vitest'
+import { makeUser } from 'test/factories/make-user'
+import { FakeHasher } from 'test/cryptography/fake-hasher'
+import { FakeTokenVerifier } from 'test/cryptography/fake-token-verifier'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
+import { ResetPasswordUseCase } from '../reset-password'
+import { UserNotFoundError } from '../errors'
+import { UserUnauthorizedError } from '../errors/user-unauthorized-error'
+
+let usersRepository: InMemoryUsersRepository
+let tokenVerifier: FakeTokenVerifier
+let hashGenerator: FakeHasher
+let sut: ResetPasswordUseCase
+
+const fakeToken = 'valid.token'
+const fakeUserId = 'user-123'
+const fakePassword = 'NovaSenha@123'
+const expectedHash = fakePassword.concat('-hashed')
+
+describe('Reset Password', () => {
+  beforeEach(() => {
+    usersRepository = new InMemoryUsersRepository()
+    tokenVerifier = new FakeTokenVerifier()
+    hashGenerator = new FakeHasher()
+
+    sut = new ResetPasswordUseCase(
+      tokenVerifier,
+      usersRepository,
+      hashGenerator,
+    )
+  })
+
+  it('should reset password when token is valid and user exists', async () => {
+    const user = makeUser({}, new UniqueEntityID(fakeUserId))
+    await usersRepository.create(user)
+
+    tokenVerifier.setTokenPayload(fakeToken, { sub: fakeUserId })
+
+    const result = await sut.execute({
+      token: fakeToken,
+      password: fakePassword,
+    })
+
+    expect(result.isRight()).toBe(true)
+    expect(user.passwordHash).toBe(expectedHash)
+  })
+
+  it('should return UserNotFoundError if user does not exist', async () => {
+    tokenVerifier.setTokenPayload(fakeToken, { sub: fakeUserId })
+
+    const result = await sut.execute({
+      token: fakeToken,
+      password: fakePassword,
+    })
+
+    expect(result.isLeft()).toBe(true)
+    expect(result.value).toBeInstanceOf(UserNotFoundError)
+  })
+
+  it('should return UserUnauthorizedError if token is invalid', async () => {
+    const result = await sut.execute({
+      token: 'invalid.token',
+      password: fakePassword,
+    })
+
+    expect(result.isLeft()).toBe(true)
+    expect(result.value).toBeInstanceOf(UserUnauthorizedError)
+  })
+})

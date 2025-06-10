@@ -22,6 +22,12 @@ import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/ref
 import { AuthModule } from '@/infra/auth/auth.module'
 import { LogoutUserController } from './logout-user.controller'
 import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-user'
+import { MailerModule } from '@/infra/mail/mailer.module'
+import { ResetPasswordController } from './reset-password.controller'
+import { ResetPasswordUseCase } from '@/domain/user/application/use-cases/reset-password'
+import { ForgotPasswordController } from './forgot-password.controller'
+import { ForgotPasswordUseCase } from '@/domain/user/application/use-cases/forgot-password'
+import { EnvModule } from '@/infra/env/env.module'
 
 @Module({
   imports: [
@@ -30,6 +36,8 @@ import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-us
     CaslAbilityModule,
     StorageModule,
     AuthModule,
+    MailerModule,
+    EnvModule,
   ],
   controllers: [
     AuthenticateUserController,
@@ -41,6 +49,8 @@ import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-us
     ListUsersController,
     RefreshTokenController,
     LogoutUserController,
+    ResetPasswordController,
+    ForgotPasswordController,
   ],
   providers: [
     AuthenticateUserUseCase,
@@ -52,6 +62,8 @@ import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-us
     ListUsersUseCase,
     RefreshUserTokenUseCase,
     LogoutUserUseCase,
+    ResetPasswordUseCase,
+    ForgotPasswordUseCase,
   ],
 })
 export class UserControllersModule {}

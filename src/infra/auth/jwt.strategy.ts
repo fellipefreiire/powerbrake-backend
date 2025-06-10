@@ -16,6 +16,7 @@ export const refreshTokenPayloadSchema = z.object({
   sub: z.string().uuid(),
   role: roleSchema,
   iat: z.number(),
+  exp: z.number(),
   jti: z.string().uuid(),
 })
 

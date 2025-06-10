@@ -8,7 +8,7 @@ import { UserAvatarWatcher } from './user-avatar-watcher'
 import { UserAvatarRepository } from '../repositories/user-avatar-repository'
 import { UserAddressWatcher } from './user-address-watcher'
 import { UserAddressRepository } from '../repositories/user-address-repository'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 import { UserAddressList } from '../../enterprise/entities/user-address-list'
 
 type EditUserUseCaseRequest = {

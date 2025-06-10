@@ -1,7 +1,7 @@
 import { UserAvatarWatcher } from '../user-avatar-watcher'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 
-describe('UserAvatarWatcher', () => {
+describe('User Avatar Watcher', () => {
   it('should return false if avatar has not changed', () => {
     const avatarId = new UniqueEntityID('avatar-1')
     const watcher = new UserAvatarWatcher(avatarId)

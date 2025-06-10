@@ -1,5 +1,5 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 
 export function makeAddress(overrides: Partial<Address> = {}): Address {
   return Address.create({

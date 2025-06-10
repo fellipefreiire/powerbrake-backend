@@ -19,7 +19,7 @@ const validPayload: RefreshTokenPayload = {
   exp: Math.floor(Date.now() / 1000) + 3600,
 }
 
-describe('RefreshUserTokenUseCase', () => {
+describe('Refresh User Token', () => {
   beforeEach(() => {
     jwtService = {
       verify: vi.fn(),

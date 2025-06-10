@@ -48,8 +48,17 @@ describe('Logout User (E2E)', () => {
 
     const jti = await refreshTokenRepository.create(user.id.toString())
 
+    const now = Math.floor(Date.now() / 1000)
+    const exp = now + 60 * 60 * 24 * 7 // 7 days
+
     const refreshToken = jwt.sign(
-      { sub: user.id.toString(), role: user.role, jti },
+      {
+        sub: user.id.toString(),
+        role: user.role,
+        jti,
+        iat: now,
+        exp,
+      },
       { algorithm: 'RS256' },
     )
 

@@ -1,7 +1,7 @@
 import { UserAddressWatcher } from '../user-address-watcher'
 import { makeAddress } from 'test/factories/make-address'
 
-describe('UserAddressWatcher', () => {
+describe('User Address Watcher', () => {
   it('should return false if addresses are identical', () => {
     const base = makeAddress()
 

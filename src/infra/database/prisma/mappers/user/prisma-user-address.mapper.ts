@@ -1,5 +1,5 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 import { Address as PrismaAddress, Prisma } from '@prisma/client'
 
 export class PrismaUserAddressMapper {

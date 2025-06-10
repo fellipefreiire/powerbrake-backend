@@ -6,9 +6,13 @@ import { JwtService } from '@nestjs/jwt'
 export class JwtEncrypter implements Encrypter {
   constructor(private jwtService: JwtService) {}
 
-  encrypt(payload: Record<string, unknown>): Promise<string> {
+  encrypt(
+    payload: Record<string, unknown>,
+    expiresInSeconds: number = 60 * 60,
+  ): Promise<string> {
     const iat = Math.floor(Date.now() / 1000)
-    const exp = iat + 60 * 60
+    const exp = iat + expiresInSeconds
+
     return this.jwtService.signAsync({
       ...payload,
       iat,

@@ -1,5 +1,5 @@
 import { UserAddressRepository } from '@/domain/user/application/repositories/user-address-repository'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 
 export class InMemoryUserAddressRepository implements UserAddressRepository {
   public items: Address[] = []

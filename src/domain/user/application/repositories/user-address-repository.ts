@@ -1,4 +1,4 @@
-import type { Address } from '@/shared/address/enterprise/address'
+import type { Address } from '@/shared/address/enterprise/entities/address'
 
 export abstract class UserAddressRepository {
   abstract findManyByUserId(userId: string): Promise<Address[]>

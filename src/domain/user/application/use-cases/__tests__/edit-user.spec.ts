@@ -7,7 +7,7 @@ import { InMemoryAvatarRepository } from 'test/repositories/avatar/in-memory-ava
 import { makeAvatar } from 'test/factories/make-avatar'
 import { UserNotFoundError } from '../errors'
 import { InMemoryUserAddressRepository } from 'test/repositories/user/in-memory-user-address-repository'
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 
 let inMemoryUsersRepository: InMemoryUsersRepository
 let inMemoryAvatarRepository: InMemoryAvatarRepository

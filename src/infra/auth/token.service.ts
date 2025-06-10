@@ -34,4 +34,8 @@ export class TokenService {
 
     return { token, expiresIn: exp }
   }
+
+  async generate(payload: Record<string, unknown>) {
+    return this.encrypter.encrypt(payload)
+  }
 }

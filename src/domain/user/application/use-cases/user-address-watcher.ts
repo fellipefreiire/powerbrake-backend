@@ -1,4 +1,4 @@
-import { Address } from '@/shared/address/enterprise/address'
+import { Address } from '@/shared/address/enterprise/entities/address'
 
 export class UserAddressWatcher {
   private current: Address[]
