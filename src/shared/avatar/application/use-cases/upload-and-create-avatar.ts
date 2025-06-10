@@ -2,7 +2,7 @@ import { left, right, type Either } from '@/core/either'
 import { Avatar } from '../../enterprise/entities/avatar'
 import { Injectable } from '@nestjs/common'
 import { AvatarRepository } from '../repositories/avatar-repository'
-import { Uploader } from '@/shared/avatar/application/storage/uploader'
+import { Uploader } from '@/shared/storage/uploader'
 import { InvalidAvatarTypeError } from './errors/invalid-avatar-type-error'
 import { AvatarUploadFailedError } from './errors/avatar-upload-failed-error'
 

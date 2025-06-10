@@ -1,9 +1,11 @@
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { User } from '@/domain/user/enterprise/entities/user'
-import { User as PrismaUser, Prisma } from '@prisma/client'
+import { UserAddressList } from '@/domain/user/enterprise/entities/user-address-list'
+import { User as PrismaUser, Prisma, Address } from '@prisma/client'
+import { PrismaUserAddressMapper } from './prisma-user-address.mapper'
 
 export class PrismaUserMapper {
-  static toDomain(raw: PrismaUser): User {
+  static toDomain(raw: PrismaUser & { addresses: Address[] }): User {
     return User.create(
       {
         name: raw.name,
@@ -12,6 +14,11 @@ export class PrismaUserMapper {
         isActive: raw.isActive,
         role: raw.role,
         avatarId: raw.avatarId ? new UniqueEntityID(raw.avatarId) : undefined,
+        addresses: new UserAddressList(
+          raw.addresses.map((address) =>
+            PrismaUserAddressMapper.toDomain(address),
+          ),
+        ),
         createdAt: raw.createdAt,
         updatedAt: raw.updatedAt,
       },

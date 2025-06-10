@@ -1,7 +1,4 @@
-import {
-  Uploader,
-  type UploadParams,
-} from '@/shared/avatar/application/storage/uploader'
+import { Uploader, type UploadParams } from '@/shared/storage/uploader'
 import { EnvService } from '../env/env.service'
 import {
   DeleteObjectCommand,

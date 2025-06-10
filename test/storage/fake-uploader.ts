@@ -1,7 +1,4 @@
-import {
-  Uploader,
-  UploadParams,
-} from '@/shared/avatar/application/storage/uploader'
+import { Uploader, UploadParams } from '@/shared/storage/uploader'
 import { randomUUID } from 'node:crypto'
 
 type Upload = {

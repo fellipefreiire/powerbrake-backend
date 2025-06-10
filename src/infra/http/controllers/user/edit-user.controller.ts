@@ -43,6 +43,19 @@ import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-up
 
 const editUserBodySchema = z.object({
   name: z.string().min(1),
+  addresses: z
+    .array(
+      z.object({
+        street: z.string(),
+        number: z.string(),
+        complement: z.string().nullish(),
+        neighborhood: z.string(),
+        city: z.string(),
+        state: z.string(),
+        zipCode: z.string(),
+      }),
+    )
+    .min(1),
   avatarId: z.string().uuid().optional(),
 })
 

@@ -46,6 +46,17 @@ const createUserBodySchema = z.object({
   name: z.string(),
   email: z.string().email(),
   password: z.string(),
+  addresses: z.array(
+    z.object({
+      street: z.string(),
+      number: z.string(),
+      complement: z.string().nullish(),
+      neighborhood: z.string(),
+      city: z.string(),
+      state: z.string(),
+      zipCode: z.string(),
+    }),
+  ),
   role: z.nativeEnum(Role),
 })
 

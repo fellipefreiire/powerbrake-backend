@@ -55,13 +55,25 @@ describe('Edit User Avatar (E2E)', () => {
 
     const avatarId = avatarUploadRes.body.data
 
+    const payload = {
+      name: 'Updated User',
+      avatarId,
+      addresses: [
+        {
+          street: 'New Street',
+          number: '202',
+          neighborhood: 'New Neighborhood',
+          city: 'New City',
+          state: 'New State',
+          zipCode: '11111-111',
+        },
+      ],
+    }
+
     await request(app.getHttpServer())
       .patch(`/v1/users/${user.id}`)
       .set('Authorization', `Bearer ${accessToken.token}`)
-      .send({
-        name: 'Updated User',
-        avatarId,
-      })
+      .send(payload)
       .expect(200)
 
     const userOnDatabase = await prisma.user.findUnique({

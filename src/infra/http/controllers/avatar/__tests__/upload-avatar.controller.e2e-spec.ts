@@ -6,7 +6,7 @@ import { UserFactory } from 'test/factories/make-user'
 import { AvatarDatabaseModule } from '@/infra/database/prisma/repositories/avatar/avatar-database.module'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import { User } from '@/domain/user/enterprise/entities/user'
-import { Uploader } from '@/shared/avatar/application/storage/uploader'
+import { Uploader } from '@/shared/storage/uploader'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 

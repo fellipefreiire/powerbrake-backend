@@ -6,6 +6,8 @@ import { UserAvatarRepository } from '@/domain/user/application/repositories/use
 import { PrismaUserAvatarRepository } from './prisma-user-avatar-repository'
 import { UserFactory } from 'test/factories/make-user'
 import { PrismaService } from '../../prisma.service'
+import { UserAddressRepository } from '@/domain/user/application/repositories/user-address-repository'
+import { PrismaUserAddressRepository } from './prisma-user-address-repository'
 
 @Module({
   imports: [CacheModule],
@@ -19,8 +21,18 @@ import { PrismaService } from '../../prisma.service'
       provide: UserAvatarRepository,
       useClass: PrismaUserAvatarRepository,
     },
+    {
+      provide: UserAddressRepository,
+      useClass: PrismaUserAddressRepository,
+    },
     UserFactory,
   ],
-  exports: [PrismaService, UsersRepository, UserAvatarRepository, UserFactory],
+  exports: [
+    PrismaService,
+    UsersRepository,
+    UserAvatarRepository,
+    UserAddressRepository,
+    UserFactory,
+  ],
 })
 export class UserDatabaseModule {}

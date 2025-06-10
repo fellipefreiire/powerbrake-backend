@@ -7,6 +7,13 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  ADMIN // Full access
+  MANAGER // Manager
+  SUPERVISOR // Reports and supervision
+  OPERATOR // Basic operations
+}
+
 model User {
   id           String   @id @default(uuid())
   name         String
@@ -18,25 +25,54 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  avatar Avatar? @relation(fields: [avatarId], references: [id])
+  avatar    Avatar?   @relation(fields: [avatarId], references: [id])
+  addresses Address[]
 
   @@map("users")
 }
 
 model Avatar {
-  id     String  @id @default(uuid())
-  title  String
-  url    String
-  userId String? @map("user_id")
+  id       String  @id @default(uuid())
+  title    String
+  url      String
+  userId   String? @map("user_id")
+  clientId String? @map("client_id")
 
-  user User?
+  user   User?
+  client Client?
 
   @@map("avatars")
 }
 
-enum Role {
-  ADMIN // Full access
-  MANAGER // Manager
-  SUPERVISOR // Reports and supervision
-  OPERATOR // Basic operations
+model Address {
+  id           String   @id @default(uuid())
+  street       String
+  number       String
+  complement   String?
+  neighborhood String
+  city         String
+  state        String
+  zipCode      String   @map("zip_code")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  userId   String? @map("user_id")
+  clientId String? @map("client_id")
+
+  user   User?   @relation(fields: [userId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id])
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  avatarId String? @unique @map("avatar_id")
+
+  addresses Address[]
+  avatar    Avatar?   @relation(fields: [avatarId], references: [id])
 }

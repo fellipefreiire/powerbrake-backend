@@ -1,4 +1,4 @@
-import { Uploader } from '@/shared/avatar/application/storage/uploader'
+import { Uploader } from '@/shared/storage/uploader'
 import { Module } from '@nestjs/common'
 import { R2Storage } from './r2-storage'
 import { EnvModule } from '../env/env.module'

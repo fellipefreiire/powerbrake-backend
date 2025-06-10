@@ -87,6 +87,16 @@ describe('Create User (E2E)', () => {
         role: 'OPERATOR',
         password: '123456',
         email: 'new.user@example.com',
+        addresses: [
+          {
+            street: 'New Street',
+            number: '202',
+            neighborhood: 'New Neighborhood',
+            city: 'New City',
+            state: 'New State',
+            zipCode: '11111-111',
+          },
+        ],
       }
 
       const response = await request(app.getHttpServer())
@@ -179,6 +189,16 @@ describe('Create User (E2E)', () => {
         role: 'OPERATOR',
         password: '123456',
         email: 'new.user@example.com',
+        addresses: [
+          {
+            street: 'New Street',
+            number: '202',
+            neighborhood: 'New Neighborhood',
+            city: 'New City',
+            state: 'New State',
+            zipCode: '11111-111',
+          },
+        ],
       }
 
       const response = await request(app.getHttpServer())
@@ -200,6 +220,7 @@ describe('Create User (E2E)', () => {
         email: 'invalid-email',
         password: 'SomePass1!',
         role: 'UNKNOWN_ROLE',
+        addresses: [],
       }
 
       const response = await request(app.getHttpServer())

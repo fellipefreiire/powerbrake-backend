@@ -67,6 +67,16 @@ describe('Edit User (E2E)', () => {
     it('[200] Success → should be able to edit user data', async () => {
       const payload = {
         name: 'Updated Name',
+        addresses: [
+          {
+            street: 'Any Street',
+            number: '123',
+            neighborhood: 'Any Neighborhood',
+            city: 'Any City',
+            state: 'Any State',
+            zipCode: '12345-678',
+          },
+        ],
       }
 
       const response = await request(app.getHttpServer())
@@ -86,6 +96,62 @@ describe('Edit User (E2E)', () => {
         where: { id: adminUser.id.toString() },
       })
       expect(userOnDatabase?.name).toBe(payload.name)
+    })
+
+    it('[200] Success → should sync addresses on edit', async () => {
+      await prisma.address.createMany({
+        data: [
+          {
+            id: 'addr-1',
+            street: 'Old Street',
+            number: '100',
+            neighborhood: 'Old Neighborhood',
+            city: 'Old City',
+            state: 'Old State',
+            zipCode: '00000-000',
+            complement: null,
+            userId: adminUser.id.toString(),
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          },
+        ],
+      })
+
+      const payload = {
+        name: 'Synced Name',
+        addresses: [
+          {
+            street: 'New Street',
+            number: '200',
+            neighborhood: 'New Neighborhood',
+            city: 'New City',
+            state: 'New State',
+            zipCode: '11111-111',
+            complement: 'Apartment 202',
+          },
+        ],
+      }
+
+      const response = await request(app.getHttpServer())
+        .patch(`/v1/users/${adminUser.id.toString()}`)
+        .set('Authorization', `Bearer ${adminAccessToken.token}`)
+        .send(payload)
+
+      expect(response.statusCode).toBe(200)
+      expect(response.body.data.addresses).toHaveLength(1)
+      expect(response.body.data.addresses[0]).toEqual(
+        expect.objectContaining({
+          street: 'New Street',
+          number: '200',
+        }),
+      )
+
+      const addressesInDB = await prisma.address.findMany({
+        where: { userId: adminUser.id.toString() },
+      })
+
+      expect(addressesInDB).toHaveLength(1)
+      expect(addressesInDB[0].street).toBe('New Street')
     })
 
     it('[400] Bad Request → should not be able to edit user without required params', async () => {
@@ -143,7 +209,7 @@ describe('Edit User (E2E)', () => {
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${adminUser.id.toString()}`)
         .set('Authorization', `Bearer ${adminAccessToken.token}`)
-        .send({ name: '' })
+        .send({ name: '', addresses: [] })
 
       expect(response.statusCode).toBe(422)
       expect(response.body).toEqual(

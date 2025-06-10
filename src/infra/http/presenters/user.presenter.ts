@@ -10,6 +10,16 @@ export class UserPresenter {
       isActive: user.isActive,
       createdAt: user.createdAt,
       updatedAt: user.updatedAt,
+      addresses: user.addresses.getItems().map((address) => ({
+        id: address.id.toString(),
+        street: address.street,
+        number: address.number,
+        neighborhood: address.neighborhood,
+        complement: address.complement,
+        city: address.city,
+        state: address.state,
+        zipCode: address.zipCode,
+      })),
     }
   }
 }

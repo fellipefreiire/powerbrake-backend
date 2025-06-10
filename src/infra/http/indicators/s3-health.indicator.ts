@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common'
 import { HealthIndicatorResult } from '@nestjs/terminus'
-import { Uploader } from '@/shared/avatar/application/storage/uploader'
+import { Uploader } from '@/shared/storage/uploader'
 
 @Injectable()
 export class S3HealthIndicator {

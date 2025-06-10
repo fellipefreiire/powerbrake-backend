@@ -2,6 +2,7 @@ import { AggregateRoot } from '@/core/entities/aggregate-root'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { Optional } from '@/core/types/optional'
 import type { Role } from '@prisma/client'
+import { UserAddressList } from './user-address-list'
 
 export interface UserProps {
   name: string
@@ -10,6 +11,7 @@ export interface UserProps {
   role: Role
   isActive: boolean
   avatarId?: UniqueEntityID | null
+  addresses: UserAddressList
   createdAt: Date
   updatedAt?: Date
 }
@@ -37,6 +39,10 @@ export class User extends AggregateRoot<UserProps> {
 
   get avatarId() {
     return this.props.avatarId
+  }
+
+  get addresses() {
+    return this.props.addresses
   }
 
   get createdAt() {
@@ -67,16 +73,25 @@ export class User extends AggregateRoot<UserProps> {
     this.touch()
   }
 
+  updateAddress(addresses: UserAddressList) {
+    this.props.addresses = addresses
+    this.touch()
+  }
+
   private touch() {
     this.props.updatedAt = new Date()
   }
 
-  static create(props: Optional<UserProps, 'createdAt'>, id?: UniqueEntityID) {
+  static create(
+    props: Optional<UserProps, 'createdAt' | 'addresses'>,
+    id?: UniqueEntityID,
+  ) {
     const now = new Date()
     const user = new User(
       {
         ...props,
         role: props.role ?? 'OPERATOR',
+        addresses: props.addresses ?? new UserAddressList(),
         isActive: props.isActive ?? true,
         createdAt: props.createdAt ?? now,
         updatedAt: props.updatedAt ?? now,

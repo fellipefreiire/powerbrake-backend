@@ -26,6 +26,9 @@ export class PrismaUsersRepository implements UsersRepository {
       where: {
         id,
       },
+      include: {
+        addresses: true,
+      },
     })
 
     if (!user) {
@@ -41,6 +44,9 @@ export class PrismaUsersRepository implements UsersRepository {
     const user = await this.prisma.user.findFirst({
       where: {
         email,
+      },
+      include: {
+        addresses: true,
       },
     })
 
@@ -70,6 +76,9 @@ export class PrismaUsersRepository implements UsersRepository {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * perPage,
         take: perPage,
+        include: {
+          addresses: true,
+        },
       }),
       this.prisma.user.count(),
     ])
