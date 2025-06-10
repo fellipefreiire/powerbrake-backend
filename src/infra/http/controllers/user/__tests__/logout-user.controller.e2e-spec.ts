@@ -1,0 +1,76 @@
+import { INestApplication, VersioningType } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import request from 'supertest'
+import { AppModule } from '@/infra/app.module'
+import { UserFactory } from 'test/factories/make-user'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { JwtService } from '@nestjs/jwt'
+
+describe('Logout User (E2E)', () => {
+  let app: INestApplication
+  let prisma: PrismaService
+  let userFactory: UserFactory
+  let refreshTokenRepository: RefreshTokenRepository
+  let jwt: JwtService
+
+  const endpoint = '/v1/users/logout'
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule],
+      providers: [UserFactory],
+    }).compile()
+
+    app = moduleRef.createNestApplication()
+    app.enableVersioning({ type: VersioningType.URI })
+
+    prisma = moduleRef.get(PrismaService)
+    jwt = moduleRef.get(JwtService)
+    userFactory = moduleRef.get(UserFactory)
+    refreshTokenRepository = moduleRef.get(RefreshTokenRepository)
+
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+  })
+
+  it('[204] OK → should logout user and revoke refresh token', async () => {
+    const user = await userFactory.makePrismaUser()
+
+    const jti = await refreshTokenRepository.create(user.id.toString())
+
+    const refreshToken = jwt.sign(
+      { sub: user.id.toString(), role: user.role, jti },
+      { algorithm: 'RS256' },
+    )
+
+    const response = await request(app.getHttpServer())
+      .post(endpoint)
+      .set('Authorization', `Bearer ${refreshToken}`)
+
+    expect(response.statusCode).toBe(204)
+  })
+
+  it('[401] Unauthorized → should fail without token', async () => {
+    const response = await request(app.getHttpServer()).post(endpoint)
+
+    expect(response.statusCode).toBe(401)
+  })
+
+  it('[401] Unauthorized → should fail with invalid token', async () => {
+    const response = await request(app.getHttpServer())
+      .post(endpoint)
+      .set('Authorization', 'Bearer invalid.token.here')
+
+    expect(response.statusCode).toBe(401)
+  })
+})

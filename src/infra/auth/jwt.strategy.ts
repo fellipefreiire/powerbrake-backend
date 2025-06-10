@@ -16,7 +16,6 @@ export const refreshTokenPayloadSchema = z.object({
   sub: z.string().uuid(),
   role: roleSchema,
   iat: z.number(),
-  exp: z.number(),
   jti: z.string().uuid(),
 })
 
@@ -35,7 +34,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     })
   }
 
-  async validate(payload: UserPayload) {
+  async validate(payload: UserPayload | RefreshTokenPayload) {
+    if (typeof payload === 'object' && payload !== null && 'jti' in payload) {
+      return refreshTokenPayloadSchema.parse(payload)
+    }
+
     return tokenPayloadSchema.parse(payload)
   }
 }
