@@ -57,7 +57,7 @@ describe('Reset Password Flow (Integration)', () => {
     })
 
     await request(app.getHttpServer())
-      .post('/v1/forgot-password')
+      .post('/v1/users/forgot-password')
       .send({
         email: user.email,
         resetPasswordUrl,
@@ -72,7 +72,7 @@ describe('Reset Password Flow (Integration)', () => {
     const token = decodeURIComponent(match![1])
 
     await request(app.getHttpServer())
-      .post('/v1/reset-password')
+      .post('/v1/users/reset-password')
       .send({
         token,
         password: 'new-password',
