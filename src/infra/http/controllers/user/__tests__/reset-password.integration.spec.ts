@@ -19,7 +19,7 @@ describe('Reset Password Flow (Integration)', () => {
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
       imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      providers: [UserFactory, FakeMailer],
     }).compile()
 
     app = moduleRef.createNestApplication()
