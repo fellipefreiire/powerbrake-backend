@@ -3,7 +3,6 @@ import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-
 import { FakeEncrypter } from 'test/cryptography/fake-encrypter'
 import { makeUser } from 'test/factories/make-user'
 import { ForgotPasswordUseCase } from '../forgot-password'
-import { UserNotFoundError } from '../errors'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { FakeMailer } from 'test/cryptography/fake-mailer'
 
@@ -46,14 +45,13 @@ describe('ForgotPasswordUseCase', () => {
     )
   })
 
-  it('should return UserNotFoundError if user does not exist', async () => {
+  it('should do nothing if user does not exist', async () => {
     const result = await sut.execute({
       email: fakeEmail,
       resetPasswordUrl,
     })
 
-    expect(result.isLeft()).toBe(true)
-    expect(result.value).toBeInstanceOf(UserNotFoundError)
+    expect(result.isRight()).toBe(true)
     expect(mailer.sent).toHaveLength(0)
   })
 })
