@@ -56,6 +56,8 @@ prisma/
       migration.sql
     20250609231405_address_and_client/
       migration.sql
+    20250611140449_audit_log/
+      migration.sql
     migration_lock.toml
   schema.prisma
   seed.ts
@@ -88,6 +90,22 @@ src/
     either.spec.ts
     either.ts
   domain/
+    audit-log/
+      application/
+        repositories/
+          audit-log-repository.ts
+        subscribers/
+          user/
+            __tests__/
+              on-user-password-changed.spec.ts
+            on-user-password-changed.ts
+        use-cases/
+          __tests__/
+            create-audit-log.spec.ts
+          create-audit-log.ts
+      enterprise/
+        entities/
+          audit-log.ts
     user/
       application/
         repositories/
@@ -140,6 +158,8 @@ src/
           user-address.ts
           user-avatar.ts
           user.ts
+        events/
+          user-password-changed-event.ts
   infra/
     auth/
       casl/
@@ -181,12 +201,17 @@ src/
     database/
       prisma/
         mappers/
+          audit-log/
+            prisma-audit-log.mapper.ts
           avatar/
             prisma-avatar.mapper.ts
           user/
             prisma-user-address.mapper.ts
             prisma-user.mapper.ts
         repositories/
+          audit-log/
+            audit-log-database.module.ts
+            prisma-audit-log.repository.ts
           avatar/
             avatar-database.module.ts
             prisma-avatar-repository.ts
@@ -205,6 +230,12 @@ src/
       env.module.ts
       env.service.ts
       env.ts
+    events/
+      user/
+        __tests__/
+          on-user-password-changed.e2e-spec.ts
+        user-events.module.ts
+      events.module.ts
     http/
       controllers/
         avatar/
@@ -300,6 +331,7 @@ src/
         avatar-error.filter.ts
         user-error.filter.ts
       indicators/
+        mailer-health.indicator.ts
         prisma-health.indicator.ts
         redis-health.indicator.ts
         s3-health.indicator.ts
@@ -369,11 +401,14 @@ test/
     rate-limit.e2e-spec.ts
   factories/
     make-address.ts
+    make-audit-log.ts
     make-avatar.ts
     make-user.ts
   mail/
     fake-mailer.ts
   repositories/
+    audit-log/
+      in-memory-audit-log.repository.ts
     avatar/
       in-memory-avatar-repository.ts
     user/
@@ -386,6 +421,7 @@ test/
     wait-for.ts
   setup-e2e.ts
 .env.example
+.env.test.example
 .eslintrc.json
 .gitignore
 .prettierrc
@@ -402,6 +438,172 @@ vitest.config.mjs
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="src/domain/audit-log/application/subscribers/user/__tests__/on-user-password-changed.spec.ts">
+import { vi } from 'vitest'
+import { waitFor } from 'test/utils/wait-for'
+import { OnUserPasswordChanged } from '@/domain/audit-log/application/subscribers/user/on-user-password-changed'
+import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
+import { makeUser } from 'test/factories/make-user'
+import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
+import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
+import { DomainEvents } from '@/core/events/domain-events'
+
+let inMemoryAuditLogRepository: InMemoryAuditLogRepository
+let inMemoryUsersRepository: InMemoryUsersRepository
+let createAuditLogUseCase: CreateAuditLogUseCase
+let createAuditLogSpy: ReturnType<typeof vi.spyOn>
+
+describe('On User Password Changed (subscriber)', () => {
+  beforeEach(() => {
+    inMemoryUsersRepository = new InMemoryUsersRepository()
+    inMemoryAuditLogRepository = new InMemoryAuditLogRepository()
+    createAuditLogUseCase = new CreateAuditLogUseCase(
+      inMemoryAuditLogRepository,
+    )
+    createAuditLogSpy = vi.spyOn(createAuditLogUseCase, 'execute')
+
+    new OnUserPasswordChanged(createAuditLogUseCase)
+  })
+
+  it('should create audit log when user password is changed', async () => {
+    const user = makeUser()
+
+    inMemoryUsersRepository.create(user)
+
+    user.updatePassword('new-password')
+
+    inMemoryUsersRepository.save(user)
+
+    DomainEvents.dispatchEventsForAggregate(user.id)
+
+    await waitFor(() => {
+      expect(createAuditLogSpy).toHaveBeenCalled()
+    })
+
+    expect(inMemoryAuditLogRepository.items).toHaveLength(1)
+    expect(inMemoryAuditLogRepository.items[0]).toEqual(
+      expect.objectContaining({
+        actorId: user.id.toString(),
+        action: 'user:password_changed',
+      }),
+    )
+  })
+})
+</file>
+
+<file path="src/domain/audit-log/application/use-cases/__tests__/create-audit-log.spec.ts">
+import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { CreateAuditLogUseCase } from '../create-audit-log'
+
+let sut: CreateAuditLogUseCase
+let auditLogRepository: InMemoryAuditLogRepository
+
+describe('Create Audit Log Use Case', () => {
+  beforeEach(() => {
+    auditLogRepository = new InMemoryAuditLogRepository()
+    sut = new CreateAuditLogUseCase(auditLogRepository)
+  })
+
+  it('should create a new audit log entry', async () => {
+    const result = await sut.execute({
+      actorId: 'user-1',
+      actorType: 'USER',
+      action: 'user:password_changed',
+      entity: 'USER',
+      entityId: 'user-1',
+      changes: { passwordChanged: true },
+    })
+
+    expect(result.isRight()).toBe(true)
+    expect(auditLogRepository.items).toHaveLength(1)
+    expect(auditLogRepository.items[0].action).toBe('user:password_changed')
+    expect(auditLogRepository.items[0].changes).toEqual({
+      passwordChanged: true,
+    })
+  })
+})
+</file>
+
+<file path="src/infra/events/user/__tests__/on-user-password-changed.e2e-spec.ts">
+import { DomainEvents } from '@/core/events/domain-events'
+import { AppModule } from '@/infra/app.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { TokenService } from '@/infra/auth/token.service'
+import { INestApplication, VersioningType } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { UserFactory } from 'test/factories/make-user'
+import { randomUUID } from 'crypto'
+import request from 'supertest'
+import { hash } from 'bcryptjs'
+import { waitFor } from 'test/utils/wait-for'
+
+describe('On user password changed (E2E)', () => {
+  let app: INestApplication
+  let prisma: PrismaService
+  let userFactory: UserFactory
+  let tokenService: TokenService
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
+    }).compile()
+
+    app = moduleRef.createNestApplication()
+    app.enableVersioning({ type: VersioningType.URI })
+
+    prisma = moduleRef.get(PrismaService)
+    userFactory = moduleRef.get(UserFactory)
+    tokenService = moduleRef.get(TokenService)
+
+    DomainEvents.shouldRun = true
+
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  it('should create audit log when user changes password', async () => {
+    const password = '123456'
+    const user = await userFactory.makePrismaUser({
+      passwordHash: await hash(password, 8),
+    })
+
+    const token = await tokenService.generate({
+      sub: user.id.toString(),
+      role: user.role,
+      jti: randomUUID(),
+    })
+
+    await request(app.getHttpServer())
+      .patch(`/v1/users/${user.id.toString()}/password`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        currentPassword: password,
+        newPassword: 'new-password',
+      })
+      .expect(204)
+
+    await waitFor(async () => {
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          actorId: user.id.toString(),
+          action: 'user:password_changed',
+        },
+      })
+
+      expect(auditLog).not.toBeNull()
+      expect(auditLog?.changes).toContain('passwordChanged')
+    })
+  })
+})
+</file>
 
 <file path=".husky/pre-push">
 #!/bin/sh
@@ -557,6 +759,99 @@ ALTER TABLE "Address" ADD CONSTRAINT "Address_client_id_fkey" FOREIGN KEY ("clie
 
 -- AddForeignKey
 ALTER TABLE "Client" ADD CONSTRAINT "Client_avatar_id_fkey" FOREIGN KEY ("avatar_id") REFERENCES "avatars"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+</file>
+
+<file path="prisma/migrations/20250611140449_audit_log/migration.sql">
+/*
+  Warnings:
+
+  - You are about to drop the `Address` table. If the table is not empty, all the data it contains will be lost.
+  - You are about to drop the `Client` table. If the table is not empty, all the data it contains will be lost.
+
+*/
+-- CreateEnum
+CREATE TYPE "ActorType" AS ENUM ('USER', 'CLIENT');
+
+-- DropForeignKey
+ALTER TABLE "Address" DROP CONSTRAINT "Address_client_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "Address" DROP CONSTRAINT "Address_user_id_fkey";
+
+-- DropForeignKey
+ALTER TABLE "Client" DROP CONSTRAINT "Client_avatar_id_fkey";
+
+-- DropTable
+DROP TABLE "Address";
+
+-- DropTable
+DROP TABLE "Client";
+
+-- CreateTable
+CREATE TABLE "address" (
+    "id" TEXT NOT NULL,
+    "street" TEXT NOT NULL,
+    "number" TEXT NOT NULL,
+    "complement" TEXT,
+    "neighborhood" TEXT NOT NULL,
+    "city" TEXT NOT NULL,
+    "state" TEXT NOT NULL,
+    "zip_code" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "user_id" TEXT,
+    "client_id" TEXT,
+
+    CONSTRAINT "address_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "clients" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "email" TEXT NOT NULL,
+    "phone" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    "avatar_id" TEXT,
+
+    CONSTRAINT "clients_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "audit_logs" (
+    "id" TEXT NOT NULL,
+    "actor_id" TEXT NOT NULL,
+    "actor_type" "ActorType" NOT NULL,
+    "action" TEXT NOT NULL,
+    "entity" TEXT NOT NULL,
+    "entity_id" TEXT NOT NULL,
+    "changes" JSONB,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "audit_logs_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateIndex
+CREATE UNIQUE INDEX "clients_email_key" ON "clients"("email");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "clients_avatar_id_key" ON "clients"("avatar_id");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_actor_id_idx" ON "audit_logs"("actor_id");
+
+-- CreateIndex
+CREATE INDEX "audit_logs_entity_entity_id_idx" ON "audit_logs"("entity", "entity_id");
+
+-- AddForeignKey
+ALTER TABLE "address" ADD CONSTRAINT "address_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "address" ADD CONSTRAINT "address_client_id_fkey" FOREIGN KEY ("client_id") REFERENCES "clients"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "clients" ADD CONSTRAINT "clients_avatar_id_fkey" FOREIGN KEY ("avatar_id") REFERENCES "avatars"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 </file>
 
 <file path="prisma/migrations/migration_lock.toml">
@@ -933,70 +1228,6 @@ export abstract class BaseError extends Error implements UseCaseError {
 }
 </file>
 
-<file path="src/core/events/domain-event.ts">
-import { UniqueEntityID } from '../entities/unique-entity-id'
-
-export interface DomainEvent {
-  ocurredAt: Date
-  getAggregateId(): UniqueEntityID
-}
-</file>
-
-<file path="src/core/events/domain-events.spec.ts">
-import { DomainEvent } from '../events/domain-event'
-import { UniqueEntityID } from '../entities/unique-entity-id'
-import { AggregateRoot } from '../entities/aggregate-root'
-import { DomainEvents } from '@/core/events/domain-events'
-import { vi } from 'vitest'
-
-class CustomAggregateCreated implements DomainEvent {
-  public ocurredAt: Date
-  private aggregate: CustomAggregate // eslint-disable-line
-
-  constructor(aggregate: CustomAggregate) {
-    this.aggregate = aggregate
-    this.ocurredAt = new Date()
-  }
-
-  public getAggregateId(): UniqueEntityID {
-    return this.aggregate.id
-  }
-}
-
-class CustomAggregate extends AggregateRoot<null> {
-  static create() {
-    const aggregate = new CustomAggregate(null)
-
-    aggregate.addDomainEvent(new CustomAggregateCreated(aggregate))
-
-    return aggregate
-  }
-}
-
-describe('domain events', () => {
-  it('should be able to dispatch and listen to events', async () => {
-    const callbackSpy = vi.fn()
-
-    // Subscriber cadastrado (ouvindo o evento de "resposta criada")
-    DomainEvents.register(callbackSpy, CustomAggregateCreated.name)
-
-    // Estou criando uma resposta porém SEM salvar no banco
-    const aggregate = CustomAggregate.create()
-
-    // Estou assegurando que o evento foi criado porém NÃO foi disparado
-    expect(aggregate.domainEvents).toHaveLength(1)
-
-    // Estou salvando a resposta no banco de dados e assim disparando o evento
-    DomainEvents.dispatchEventsForAggregate(aggregate.id)
-
-    // O subscriber ouve o evento e faz o que precisa ser feito com o dado
-    expect(callbackSpy).toHaveBeenCalled()
-
-    expect(aggregate.domainEvents).toHaveLength(0)
-  })
-})
-</file>
-
 <file path="src/core/events/domain-events.ts">
 import { AggregateRoot } from '../entities/aggregate-root'
 import { UniqueEntityID } from '../entities/unique-entity-id'
@@ -1182,6 +1413,157 @@ export const left = <L, R>(value: L): Either<L, R> => {
 
 export const right = <L, R>(value: R): Either<L, R> => {
   return new Right(value)
+}
+</file>
+
+<file path="src/domain/audit-log/application/repositories/audit-log-repository.ts">
+import { AuditLog } from '../../enterprise/entities/audit-log'
+
+export abstract class AuditLogRepository {
+  abstract create(auditLog: AuditLog): Promise<void>
+}
+</file>
+
+<file path="src/domain/audit-log/application/subscribers/user/on-user-password-changed.ts">
+import { Injectable } from '@nestjs/common'
+import { DomainEvents } from '@/core/events/domain-events'
+import { EventHandler } from '@/core/events/event-handler'
+import { UserPasswordChangedEvent } from '@/domain/user/enterprise/events/user-password-changed-event'
+import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
+
+@Injectable()
+export class OnUserPasswordChanged implements EventHandler {
+  constructor(private createAuditLog: CreateAuditLogUseCase) {
+    this.setupSubscriptions()
+  }
+
+  setupSubscriptions(): void {
+    DomainEvents.register(this.handle.bind(this), UserPasswordChangedEvent.name)
+  }
+
+  private async handle(event: UserPasswordChangedEvent): Promise<void> {
+    await this.createAuditLog.execute({
+      actorId: event.user.id.toString(),
+      actorType: 'USER',
+      action: 'user:password_changed',
+      entity: 'USER',
+      entityId: event.user.id.toString(),
+      changes: {
+        passwordChanged: true,
+      },
+    })
+  }
+}
+</file>
+
+<file path="src/domain/audit-log/application/use-cases/create-audit-log.ts">
+import { Injectable } from '@nestjs/common'
+import { Either, right } from '@/core/either'
+import { AuditLog } from '../../enterprise/entities/audit-log'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { ActorType } from '@prisma/client'
+import { AuditLogRepository } from '../repositories/audit-log-repository'
+
+type CreateAuditLogUseCaseRequest = {
+  actorId: string
+  actorType: ActorType
+  action: string
+  entity: string
+  entityId: string
+  changes?: Record<string, unknown> | null
+}
+
+type CreateAuditLogUseCaseResponse = Either<null, void>
+
+@Injectable()
+export class CreateAuditLogUseCase {
+  constructor(private auditLogsRepository: AuditLogRepository) {}
+
+  async execute({
+    actorId,
+    actorType,
+    action,
+    entity,
+    entityId,
+    changes,
+  }: CreateAuditLogUseCaseRequest): Promise<CreateAuditLogUseCaseResponse> {
+    const auditLog = AuditLog.create(
+      {
+        actorId,
+        actorType,
+        action,
+        entity,
+        entityId,
+        changes,
+      },
+      new UniqueEntityID(),
+    )
+
+    await this.auditLogsRepository.create(auditLog)
+
+    return right(undefined)
+  }
+}
+</file>
+
+<file path="src/domain/audit-log/enterprise/entities/audit-log.ts">
+import { Entity } from '@/core/entities/entity'
+import { Optional } from '@/core/types/optional'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+
+export type ActorType = 'USER' | 'CLIENT'
+
+export interface AuditLogProps {
+  actorId: string
+  actorType: ActorType
+  action: string
+  entity: string
+  entityId: string
+  changes?: Record<string, unknown> | null
+  createdAt: Date
+}
+
+export class AuditLog extends Entity<AuditLogProps> {
+  get actorId() {
+    return this.props.actorId
+  }
+
+  get actorType() {
+    return this.props.actorType
+  }
+
+  get action() {
+    return this.props.action
+  }
+
+  get entity() {
+    return this.props.entity
+  }
+
+  get entityId() {
+    return this.props.entityId
+  }
+
+  get changes() {
+    return this.props.changes
+  }
+
+  get createdAt() {
+    return this.props.createdAt
+  }
+
+  static create(
+    props: Optional<AuditLogProps, 'createdAt'>,
+    id?: UniqueEntityID,
+  ) {
+    return new AuditLog(
+      {
+        ...props,
+        createdAt: props.createdAt ?? new Date(),
+      },
+      id,
+    )
+  }
 }
 </file>
 
@@ -1598,6 +1980,26 @@ export class UserAddress extends Entity<UserAddressProps> {
 }
 </file>
 
+<file path="src/domain/user/enterprise/events/user-password-changed-event.ts">
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import { DomainEvent } from '@/core/events/domain-event'
+import type { User } from '../entities/user'
+
+export class UserPasswordChangedEvent implements DomainEvent {
+  public occurredAt: Date
+  public user: User
+
+  constructor(user: User) {
+    this.user = user
+    this.occurredAt = new Date()
+  }
+
+  getAggregateId(): UniqueEntityID {
+    return this.user.id
+  }
+}
+</file>
+
 <file path="src/infra/auth/casl/handlers/user-can-read-self.handler.ts">
 import type { ExecutionContext } from '@nestjs/common'
 import type { Role } from '@prisma/client'
@@ -1792,6 +2194,28 @@ export class JwtVerifier implements TokenVerifier {
 }
 </file>
 
+<file path="src/infra/database/prisma/mappers/audit-log/prisma-audit-log.mapper.ts">
+import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
+import { Prisma } from '@prisma/client'
+
+export class PrismaAuditLogMapper {
+  static toPrisma(auditLog: AuditLog): Prisma.AuditLogCreateInput {
+    return {
+      id: auditLog.id.toString(),
+      actorId: auditLog.actorId.toString(),
+      actorType: auditLog.actorType,
+      action: auditLog.action,
+      entity: auditLog.entity,
+      entityId: auditLog.entityId.toString(),
+      changes: auditLog.changes
+        ? JSON.stringify(auditLog.changes)
+        : Prisma.JsonNull,
+      createdAt: auditLog.createdAt,
+    }
+  }
+}
+</file>
+
 <file path="src/infra/database/prisma/mappers/avatar/prisma-avatar.mapper.ts">
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { Avatar } from '@/shared/avatar/enterprise/entities/avatar'
@@ -1814,6 +2238,46 @@ export class PrismaAvatarMapper {
       title: avatar.title,
       url: avatar.url,
     }
+  }
+}
+</file>
+
+<file path="src/infra/database/prisma/repositories/audit-log/audit-log-database.module.ts">
+import { Module } from '@nestjs/common'
+import { PrismaAuditLogRepository } from './prisma-audit-log.repository'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { AuditLogRepository } from '@/domain/audit-log/application/repositories/audit-log-repository'
+
+@Module({
+  providers: [
+    PrismaService,
+    {
+      provide: AuditLogRepository,
+      useClass: PrismaAuditLogRepository,
+    },
+  ],
+  exports: [PrismaService, AuditLogRepository],
+})
+export class AuditLogDatabaseModule {}
+</file>
+
+<file path="src/infra/database/prisma/repositories/audit-log/prisma-audit-log.repository.ts">
+import { Injectable } from '@nestjs/common'
+import { AuditLogRepository } from '@/domain/audit-log/application/repositories/audit-log-repository'
+import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { PrismaAuditLogMapper } from '../../mappers/audit-log/prisma-audit-log.mapper'
+
+@Injectable()
+export class PrismaAuditLogRepository implements AuditLogRepository {
+  constructor(private prisma: PrismaService) {}
+
+  async create(auditLog: AuditLog): Promise<void> {
+    const data = PrismaAuditLogMapper.toPrisma(auditLog)
+
+    await this.prisma.auditLog.create({
+      data,
+    })
   }
 }
 </file>
@@ -1946,6 +2410,30 @@ export class EnvService {
     return this.configService.get(key, { infer: true })
   }
 }
+</file>
+
+<file path="src/infra/events/user/user-events.module.ts">
+// src/infra/events/user/user-events.module.ts
+import { Module } from '@nestjs/common'
+import { OnUserPasswordChanged } from '@/domain/audit-log/application/subscribers/user/on-user-password-changed'
+import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
+import { AuditLogDatabaseModule } from '@/infra/database/prisma/repositories/audit-log/audit-log-database.module'
+
+@Module({
+  imports: [AuditLogDatabaseModule],
+  providers: [OnUserPasswordChanged, CreateAuditLogUseCase],
+})
+export class UserEventsModule {}
+</file>
+
+<file path="src/infra/events/events.module.ts">
+import { Module } from '@nestjs/common'
+import { UserEventsModule } from './user/user-events.module'
+
+@Module({
+  imports: [UserEventsModule],
+})
+export class EventsModule {}
 </file>
 
 <file path="src/infra/http/controllers/user/__tests__/edit-user-password.controller.e2e-spec.ts">
@@ -2984,6 +3472,31 @@ export class UserResponseDto {
 }
 </file>
 
+<file path="src/infra/http/indicators/mailer-health.indicator.ts">
+import { Injectable } from '@nestjs/common'
+import { type HealthIndicatorResult } from '@nestjs/terminus'
+import { MailRepository } from '@/infra/mail/mail-repository'
+
+@Injectable()
+export class MailHealthIndicator {
+  constructor(private readonly mailer: MailRepository) {}
+
+  async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    try {
+      await this.mailer.verify()
+      return {
+        [key]: { status: 'up' },
+      }
+    } catch (error) {
+      console.error('Mail Health Check failed:', error)
+      return {
+        [key]: { status: 'down' },
+      }
+    }
+  }
+}
+</file>
+
 <file path="src/infra/http/indicators/prisma-health.indicator.ts">
 import { Injectable } from '@nestjs/common'
 import { type HealthIndicatorResult } from '@nestjs/terminus'
@@ -3307,16 +3820,6 @@ export const WinstonLoggerProvider: Provider = {
 
 <file path="src/infra/logger/winston/winston.token.ts">
 export const WINSTON_LOGGER = Symbol('WINSTON_LOGGER')
-</file>
-
-<file path="src/infra/mail/mail-repository.ts">
-export abstract class MailRepository {
-  abstract send(params: {
-    to: string
-    subject: string
-    html: string
-  }): Promise<void>
-}
 </file>
 
 <file path="src/infra/mail/mailer.module.ts">
@@ -3772,6 +4275,55 @@ describe('Rate Limit (E2E)', () => {
 })
 </file>
 
+<file path="test/factories/make-audit-log.ts">
+import { faker } from '@faker-js/faker'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import {
+  AuditLog,
+  type AuditLogProps,
+} from '@/domain/audit-log/enterprise/entities/audit-log'
+import { Injectable } from '@nestjs/common'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { PrismaAuditLogMapper } from '@/infra/database/prisma/mappers/audit-log/prisma-audit-log.mapper'
+
+export function makeAuditLog(
+  override: Partial<AuditLogProps> = {},
+  id?: UniqueEntityID,
+) {
+  const auditLog = AuditLog.create(
+    {
+      actorId: faker.string.uuid(),
+      actorType: 'USER',
+      action: 'create',
+      entity: 'User',
+      entityId: faker.string.uuid(),
+      changes: { name: 'new name' },
+      ...override,
+    },
+    id,
+  )
+
+  return auditLog
+}
+
+@Injectable()
+export class AuditLogFactory {
+  constructor(private prisma: PrismaService) {}
+
+  async makePrismaAuditLog(
+    data: Partial<AuditLogProps> = {},
+  ): Promise<AuditLog> {
+    const auditLog = makeAuditLog(data)
+
+    await this.prisma.auditLog.create({
+      data: PrismaAuditLogMapper.toPrisma(auditLog),
+    })
+
+    return auditLog
+  }
+}
+</file>
+
 <file path="test/factories/make-avatar.ts">
 import { faker } from '@faker-js/faker'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
@@ -3827,6 +4379,19 @@ export class FakeMailer implements MailRepository {
     html: string
   }): Promise<void> {
     this.sent.push(data)
+  }
+}
+</file>
+
+<file path="test/repositories/audit-log/in-memory-audit-log.repository.ts">
+import { AuditLogRepository } from '@/domain/audit-log/application/repositories/audit-log-repository'
+import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
+
+export class InMemoryAuditLogRepository implements AuditLogRepository {
+  public items: AuditLog[] = []
+
+  async create(auditLog: AuditLog): Promise<void> {
+    this.items.push(auditLog)
   }
 }
 </file>
@@ -3919,18 +4484,9 @@ afterAll(async () => {
 })
 </file>
 
-<file path=".env.example">
-DATABASE_URL=
-NODE_ENV=dev
-APP_PORT="3333"
-DATABASE_HOST="database"
-DATABASE_PORT="5432"
-DATABASE_USERNAME="postgres"
-DATABASE_PASSWORD="postgres"
-DATABASE_NAME="app"
-REDIS_TTL=600
-JWT_PRIVATE_KEY=
-JWT_PUBLIC_KEY=
+<file path=".env.test.example">
+AWS_BUCKET_NAME="bucket-test"
+REDIS_DB=1
 </file>
 
 <file path=".eslintrc.json">
@@ -4266,85 +4822,68 @@ export default defineConfig({
 })
 </file>
 
-<file path="prisma/schema.prisma">
-generator client {
-  provider = "prisma-client-js"
+<file path="src/core/events/domain-event.ts">
+import { UniqueEntityID } from '../entities/unique-entity-id'
+
+export interface DomainEvent {
+  occurredAt: Date
+  getAggregateId(): UniqueEntityID
+}
+</file>
+
+<file path="src/core/events/domain-events.spec.ts">
+import { DomainEvent } from '../events/domain-event'
+import { UniqueEntityID } from '../entities/unique-entity-id'
+import { AggregateRoot } from '../entities/aggregate-root'
+import { DomainEvents } from '@/core/events/domain-events'
+import { vi } from 'vitest'
+
+class CustomAggregateCreated implements DomainEvent {
+  public occurredAt: Date
+  private aggregate: CustomAggregate // eslint-disable-line
+
+  constructor(aggregate: CustomAggregate) {
+    this.aggregate = aggregate
+    this.occurredAt = new Date()
+  }
+
+  public getAggregateId(): UniqueEntityID {
+    return this.aggregate.id
+  }
 }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+class CustomAggregate extends AggregateRoot<null> {
+  static create() {
+    const aggregate = new CustomAggregate(null)
+
+    aggregate.addDomainEvent(new CustomAggregateCreated(aggregate))
+
+    return aggregate
+  }
 }
 
-enum Role {
-  ADMIN // Full access
-  MANAGER // Manager
-  SUPERVISOR // Reports and supervision
-  OPERATOR // Basic operations
-}
+describe('domain events', () => {
+  it('should be able to dispatch and listen to events', async () => {
+    const callbackSpy = vi.fn()
 
-model User {
-  id           String   @id @default(uuid())
-  name         String
-  email        String   @unique
-  passwordHash String   @map("password_hash")
-  role         Role     @default(OPERATOR)
-  isActive     Boolean  @default(true) @map("is_active")
-  avatarId     String?  @unique @map("avatar_id")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+    // Subscriber cadastrado (ouvindo o evento de "resposta criada")
+    DomainEvents.register(callbackSpy, CustomAggregateCreated.name)
 
-  avatar    Avatar?   @relation(fields: [avatarId], references: [id])
-  addresses Address[]
+    // Estou criando uma resposta porém SEM salvar no banco
+    const aggregate = CustomAggregate.create()
 
-  @@map("users")
-}
+    // Estou assegurando que o evento foi criado porém NÃO foi disparado
+    expect(aggregate.domainEvents).toHaveLength(1)
 
-model Avatar {
-  id       String  @id @default(uuid())
-  title    String
-  url      String
-  userId   String? @map("user_id")
-  clientId String? @map("client_id")
+    // Estou salvando a resposta no banco de dados e assim disparando o evento
+    DomainEvents.dispatchEventsForAggregate(aggregate.id)
 
-  user   User?
-  client Client?
+    // O subscriber ouve o evento e faz o que precisa ser feito com o dado
+    expect(callbackSpy).toHaveBeenCalled()
 
-  @@map("avatars")
-}
-
-model Address {
-  id           String   @id @default(uuid())
-  street       String
-  number       String
-  complement   String?
-  neighborhood String
-  city         String
-  state        String
-  zipCode      String   @map("zip_code")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  userId   String? @map("user_id")
-  clientId String? @map("client_id")
-
-  user   User?   @relation(fields: [userId], references: [id])
-  client Client? @relation(fields: [clientId], references: [id])
-}
-
-model Client {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  phone     String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  avatarId String? @unique @map("avatar_id")
-
-  addresses Address[]
-  avatar    Avatar?   @relation(fields: [avatarId], references: [id])
-}
+    expect(aggregate.domainEvents).toHaveLength(0)
+  })
+})
 </file>
 
 <file path="src/core/repositories/pagination-params.ts">
@@ -5851,64 +6390,6 @@ describe('Reset Password (E2E)', () => {
 })
 </file>
 
-<file path="src/infra/http/controllers/health.controller.ts">
-import { Public } from '@/infra/auth/public'
-import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
-import { Controller, Get } from '@nestjs/common'
-import {
-  ApiTags,
-  ApiOperation,
-  ApiOkResponse,
-  ApiServiceUnavailableResponse,
-} from '@nestjs/swagger'
-import {
-  HealthCheckService,
-  HealthCheck,
-  HealthCheckResult,
-} from '@nestjs/terminus'
-import { PrismaHealthIndicator } from '../indicators/prisma-health.indicator'
-import { RedisHealthIndicator } from '../indicators/redis-health.indicator'
-import { S3HealthIndicator } from '../indicators/s3-health.indicator'
-import { HealthCheckResponseDto } from '../dtos/common/health-check-response.dto'
-
-@ApiTags('Health')
-@ServiceTag('health')
-@Public()
-@Controller('health')
-export class HealthController {
-  constructor(
-    private health: HealthCheckService,
-    private prisma: PrismaHealthIndicator,
-    private redis: RedisHealthIndicator,
-    private s3: S3HealthIndicator,
-  ) {}
-
-  @Get()
-  @HealthCheck()
-  @ApiOperation({
-    summary: 'Check application health and its dependent services.',
-    description:
-      'Returns the status of monitored components (database, Redis, S3). Overall status will be "ok" if all components are healthy, or "error" if any component fails.',
-  })
-  @ApiOkResponse({
-    description: 'All services are operational and the application is healthy.',
-    type: HealthCheckResponseDto,
-  })
-  @ApiServiceUnavailableResponse({
-    description:
-      'One or more services are unavailable or the application is unhealthy.',
-    type: HealthCheckResponseDto,
-  })
-  check(): Promise<HealthCheckResult> {
-    return this.health.check([
-      () => this.prisma.isHealthy('database'),
-      () => this.redis.isHealthy('redis'),
-      () => this.s3.isHealthy('s3'),
-    ])
-  }
-}
-</file>
-
 <file path="src/infra/http/dtos/error/user/index.ts">
 export * from './user-inactive.dto'
 export * from './wrong-credentials.dto'
@@ -6144,34 +6625,6 @@ export class UserPresenter {
 }
 </file>
 
-<file path="src/infra/http/http.module.ts">
-import { Module } from '@nestjs/common'
-import { UserControllersModule } from './controllers/user/user-controllers.module'
-import { AvatarControllersModule } from './controllers/avatar/avatar-controllers.module'
-import { TerminusModule } from '@nestjs/terminus'
-import { HealthController } from './controllers/health.controller'
-import { PrismaHealthIndicator } from './indicators/prisma-health.indicator'
-import { RedisHealthIndicator } from './indicators/redis-health.indicator'
-import { S3HealthIndicator } from './indicators/s3-health.indicator'
-import { PrismaModule } from '../database/prisma/prisma.module'
-import { CacheModule } from '../cache/cache.module'
-import { StorageModule } from '../storage/storage.module'
-
-@Module({
-  imports: [
-    UserControllersModule,
-    AvatarControllersModule,
-    TerminusModule,
-    PrismaModule,
-    CacheModule,
-    StorageModule,
-  ],
-  controllers: [HealthController],
-  providers: [PrismaHealthIndicator, RedisHealthIndicator, S3HealthIndicator],
-})
-export class HttpModule {}
-</file>
-
 <file path="src/infra/logger/logger.module.ts">
 import { Module, Global } from '@nestjs/common'
 import { WinstonLoggerProvider } from './winston/winston.provider'
@@ -6194,74 +6647,15 @@ import { RequestLoggingInterceptor } from './winston/logger.interceptor'
 export class LoggerModule {}
 </file>
 
-<file path="src/infra/mail/resend/resend-mailer.ts">
-import { Injectable } from '@nestjs/common'
-import { Resend } from 'resend'
-import type { MailRepository } from '../mail-repository'
-
-interface SendEmailParams {
-  to: string
-  subject: string
-  html: string
+<file path="src/infra/mail/mail-repository.ts">
+export abstract class MailRepository {
+  abstract verify(): Promise<void>
+  abstract send(params: {
+    to: string
+    subject: string
+    html: string
+  }): Promise<void>
 }
-
-@Injectable()
-export class ResendMailer implements MailRepository {
-  private client: Resend
-
-  constructor() {
-    this.client = new Resend(process.env.RESEND_API_KEY)
-  }
-
-  async send(params: SendEmailParams): Promise<void> {
-    await this.client.emails.send({
-      from: 'onboarding@resend.dev',
-      to: params.to,
-      subject: params.subject,
-      html: params.html,
-    })
-  }
-}
-</file>
-
-<file path="src/infra/app.module.ts">
-import { Module } from '@nestjs/common'
-import { ConfigModule } from '@nestjs/config'
-import { envSchema } from './env/env'
-import { HttpModule } from './http/http.module'
-import { AuthModule } from './auth/auth.module'
-import { EnvModule } from './env/env.module'
-import { LoggerModule } from './logger/logger.module'
-import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
-import { APP_GUARD } from '@nestjs/core'
-
-@Module({
-  imports: [
-    ConfigModule.forRoot({
-      validate: (env) => envSchema.parse(env),
-      isGlobal: true,
-    }),
-    ThrottlerModule.forRoot({
-      throttlers: [
-        {
-          ttl: 60,
-          limit: 10,
-        },
-      ],
-    }),
-    LoggerModule,
-    AuthModule,
-    HttpModule,
-    EnvModule,
-  ],
-  providers: [
-    {
-      provide: APP_GUARD,
-      useClass: ThrottlerGuard,
-    },
-  ],
-})
-export class AppModule {}
 </file>
 
 <file path="src/infra/main.ts">
@@ -6615,6 +7009,144 @@ export class FakeUploader implements Uploader {
       this.uploads.splice(uploadIndex, 1)
     }
   }
+}
+</file>
+
+<file path=".env.example">
+# APP
+NODE_ENV=dev
+APP_PORT="3333"
+
+# DATABASE
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/postgres?schema=public"
+DATABASE_HOST="localhost"
+DATABASE_PORT="5432"
+DATABASE_USERNAME="postgres"
+DATABASE_PASSWORD="postgres"
+DATABASE_NAME="postgres"
+
+# REDIS
+REDIS_HOST="127.0.0.1"
+REDIS_PORT=6379
+REDIS_DB=0
+
+# UPLOAD (AWS & CLOUDFARE)
+CLOUDFLARE_ACCOUNT_ID=""
+AWS_ACCESS_KEY_ID=""
+AWS_SECRET_ACCESS_KEY=""
+AWS_BUCKET_NAME="bucket"
+
+# MAIL
+RESEND_API_KEY=""
+RESET_PASSWORD_URL="http://localhost:3000/reset-password"
+
+# JWT
+JWT_PRIVATE_KEY=
+JWT_PUBLIC_KEY=
+</file>
+
+<file path="prisma/schema.prisma">
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN // Full access
+  MANAGER // Manager
+  SUPERVISOR // Reports and supervision
+  OPERATOR // Basic operations
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  role         Role     @default(OPERATOR)
+  isActive     Boolean  @default(true) @map("is_active")
+  avatarId     String?  @unique @map("avatar_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  avatar    Avatar?   @relation(fields: [avatarId], references: [id])
+  addresses Address[]
+
+  @@map("users")
+}
+
+model Avatar {
+  id       String  @id @default(uuid())
+  title    String
+  url      String
+  userId   String? @map("user_id")
+  clientId String? @map("client_id")
+
+  user   User?
+  client Client?
+
+  @@map("avatars")
+}
+
+model Address {
+  id           String   @id @default(uuid())
+  street       String
+  number       String
+  complement   String?
+  neighborhood String
+  city         String
+  state        String
+  zipCode      String   @map("zip_code")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  userId   String? @map("user_id")
+  clientId String? @map("client_id")
+
+  user   User?   @relation(fields: [userId], references: [id])
+  client Client? @relation(fields: [clientId], references: [id])
+
+  @@map("address")
+}
+
+model Client {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  phone     String
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  avatarId String? @unique @map("avatar_id")
+
+  addresses Address[]
+  avatar    Avatar?   @relation(fields: [avatarId], references: [id])
+
+  @@map("clients")
+}
+
+enum ActorType {
+  USER
+  CLIENT
+}
+
+model AuditLog {
+  id        String    @id @default(uuid())
+  actorId   String    @map("actor_id")
+  actorType ActorType @map("actor_type")
+  action    String
+  entity    String
+  entityId  String    @map("entity_id")
+  changes   Json?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
 }
 </file>
 
@@ -6988,117 +7520,6 @@ export class ResetPasswordUseCase {
     await this.refreshTokenRepository.revokeAllForUser(user.id.toString())
 
     return right(undefined)
-  }
-}
-</file>
-
-<file path="src/domain/user/enterprise/entities/user.ts">
-import { AggregateRoot } from '@/core/entities/aggregate-root'
-import { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import type { Optional } from '@/core/types/optional'
-import type { Role } from '@prisma/client'
-import { UserAddressList } from './user-address-list'
-
-export interface UserProps {
-  name: string
-  email: string
-  passwordHash: string
-  role: Role
-  isActive: boolean
-  avatarId?: UniqueEntityID | null
-  addresses: UserAddressList
-  createdAt: Date
-  updatedAt?: Date
-}
-
-export class User extends AggregateRoot<UserProps> {
-  get name() {
-    return this.props.name
-  }
-
-  get email() {
-    return this.props.email
-  }
-
-  get passwordHash() {
-    return this.props.passwordHash
-  }
-
-  get role() {
-    return this.props.role
-  }
-
-  get isActive() {
-    return this.props.isActive
-  }
-
-  get avatarId() {
-    return this.props.avatarId
-  }
-
-  get addresses() {
-    return this.props.addresses
-  }
-
-  get createdAt() {
-    return this.props.createdAt
-  }
-
-  get updatedAt() {
-    return this.props.updatedAt
-  }
-
-  updateName(value: string) {
-    this.props.name = value
-    this.touch()
-  }
-
-  updateRole(value: Role) {
-    this.props.role = value
-    this.touch()
-  }
-
-  toggleActive() {
-    this.props.isActive = !this.props.isActive
-    this.touch()
-  }
-
-  updateAvatar(value: UniqueEntityID | undefined | null) {
-    this.props.avatarId = value
-    this.touch()
-  }
-
-  updateAddress(addresses: UserAddressList) {
-    this.props.addresses = addresses
-    this.touch()
-  }
-
-  updatePassword(hash: string) {
-    this.props.passwordHash = hash
-    this.touch()
-  }
-
-  private touch() {
-    this.props.updatedAt = new Date()
-  }
-
-  static create(
-    props: Optional<UserProps, 'createdAt' | 'addresses'>,
-    id?: UniqueEntityID,
-  ) {
-    const now = new Date()
-    const user = new User(
-      {
-        ...props,
-        role: props.role ?? 'OPERATOR',
-        addresses: props.addresses ?? new UserAddressList(),
-        isActive: props.isActive ?? true,
-        createdAt: props.createdAt ?? now,
-        updatedAt: props.updatedAt ?? now,
-      },
-      id,
-    )
-    return user
   }
 }
 </file>
@@ -8017,6 +8438,67 @@ export class LogoutUserController {
 }
 </file>
 
+<file path="src/infra/http/controllers/health.controller.ts">
+import { Public } from '@/infra/auth/public'
+import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
+import { Controller, Get } from '@nestjs/common'
+import {
+  ApiTags,
+  ApiOperation,
+  ApiOkResponse,
+  ApiServiceUnavailableResponse,
+} from '@nestjs/swagger'
+import {
+  HealthCheckService,
+  HealthCheck,
+  HealthCheckResult,
+} from '@nestjs/terminus'
+import { PrismaHealthIndicator } from '../indicators/prisma-health.indicator'
+import { RedisHealthIndicator } from '../indicators/redis-health.indicator'
+import { S3HealthIndicator } from '../indicators/s3-health.indicator'
+import { HealthCheckResponseDto } from '../dtos/common/health-check-response.dto'
+import { MailHealthIndicator } from '../indicators/mailer-health.indicator'
+
+@ApiTags('Health')
+@ServiceTag('health')
+@Public()
+@Controller('health')
+export class HealthController {
+  constructor(
+    private health: HealthCheckService,
+    private prisma: PrismaHealthIndicator,
+    private redis: RedisHealthIndicator,
+    private s3: S3HealthIndicator,
+    private mailer: MailHealthIndicator,
+  ) {}
+
+  @Get()
+  @HealthCheck()
+  @ApiOperation({
+    summary: 'Check application health and its dependent services.',
+    description:
+      'Returns the status of monitored components (database, Redis, S3). Overall status will be "ok" if all components are healthy, or "error" if any component fails.',
+  })
+  @ApiOkResponse({
+    description: 'All services are operational and the application is healthy.',
+    type: HealthCheckResponseDto,
+  })
+  @ApiServiceUnavailableResponse({
+    description:
+      'One or more services are unavailable or the application is unhealthy.',
+    type: HealthCheckResponseDto,
+  })
+  check(): Promise<HealthCheckResult> {
+    return this.health.check([
+      () => this.prisma.isHealthy('database'),
+      () => this.redis.isHealthy('redis'),
+      () => this.s3.isHealthy('s3'),
+      () => this.mailer.isHealthy('reSend'),
+    ])
+  }
+}
+</file>
+
 <file path="src/infra/http/dtos/requests/user/index.ts">
 export * from './authenticate-request.dto'
 export * from './create-user-request.dto'
@@ -8032,6 +8514,81 @@ export * from './authenticate-response.dto'
 export * from './user-response.dto'
 export * from './user-list-response.dto'
 export * from './refresh-token-response.dto'
+</file>
+
+<file path="src/infra/http/http.module.ts">
+import { Module } from '@nestjs/common'
+import { UserControllersModule } from './controllers/user/user-controllers.module'
+import { AvatarControllersModule } from './controllers/avatar/avatar-controllers.module'
+import { TerminusModule } from '@nestjs/terminus'
+import { HealthController } from './controllers/health.controller'
+import { PrismaHealthIndicator } from './indicators/prisma-health.indicator'
+import { RedisHealthIndicator } from './indicators/redis-health.indicator'
+import { S3HealthIndicator } from './indicators/s3-health.indicator'
+import { PrismaModule } from '../database/prisma/prisma.module'
+import { CacheModule } from '../cache/cache.module'
+import { StorageModule } from '../storage/storage.module'
+import { MailHealthIndicator } from './indicators/mailer-health.indicator'
+import { MailerModule } from '../mail/mailer.module'
+
+@Module({
+  imports: [
+    UserControllersModule,
+    AvatarControllersModule,
+    TerminusModule,
+    PrismaModule,
+    CacheModule,
+    StorageModule,
+    MailerModule,
+  ],
+  controllers: [HealthController],
+  providers: [
+    PrismaHealthIndicator,
+    RedisHealthIndicator,
+    S3HealthIndicator,
+    MailHealthIndicator,
+  ],
+})
+export class HttpModule {}
+</file>
+
+<file path="src/infra/mail/resend/resend-mailer.ts">
+import { Injectable } from '@nestjs/common'
+import { Resend } from 'resend'
+import type { MailRepository } from '../mail-repository'
+
+interface SendEmailParams {
+  to: string
+  subject: string
+  html: string
+}
+
+@Injectable()
+export class ResendMailer implements MailRepository {
+  private client: Resend
+
+  constructor() {
+    this.client = new Resend(process.env.RESEND_API_KEY)
+  }
+
+  async send(params: SendEmailParams): Promise<void> {
+    await this.client.emails.send({
+      from: 'onboarding@resend.dev',
+      to: params.to,
+      subject: params.subject,
+      html: params.html,
+    })
+  }
+
+  async verify(): Promise<void> {
+    await this.client.emails.send({
+      to: 'healthcheck@example.com',
+      from: 'no-reply@example.com',
+      subject: '[HealthCheck] Email',
+      html: '<p>Health check</p>',
+    })
+  }
+}
 </file>
 
 <file path="src/infra/storage/storage.module.ts">
@@ -8051,6 +8608,48 @@ import { R2Storage } from './r2/r2-storage'
   exports: [Uploader],
 })
 export class StorageModule {}
+</file>
+
+<file path="src/infra/app.module.ts">
+import { Module } from '@nestjs/common'
+import { ConfigModule } from '@nestjs/config'
+import { envSchema } from './env/env'
+import { HttpModule } from './http/http.module'
+import { AuthModule } from './auth/auth.module'
+import { EnvModule } from './env/env.module'
+import { LoggerModule } from './logger/logger.module'
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
+import { APP_GUARD } from '@nestjs/core'
+import { EventsModule } from './events/events.module'
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      validate: (env) => envSchema.parse(env),
+      isGlobal: true,
+    }),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: 60,
+          limit: 10,
+        },
+      ],
+    }),
+    LoggerModule,
+    AuthModule,
+    HttpModule,
+    EnvModule,
+    EventsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
+})
+export class AppModule {}
 </file>
 
 <file path="src/shared/avatar/application/use-cases/upload-and-create-avatar.ts">
@@ -8622,6 +9221,120 @@ export class RefreshUserTokenUseCase {
       },
       expiresIn: accessToken.expiresIn,
     })
+  }
+}
+</file>
+
+<file path="src/domain/user/enterprise/entities/user.ts">
+import { AggregateRoot } from '@/core/entities/aggregate-root'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import type { Optional } from '@/core/types/optional'
+import type { Role } from '@prisma/client'
+import { UserAddressList } from './user-address-list'
+import { UserPasswordChangedEvent } from '../events/user-password-changed-event'
+
+export interface UserProps {
+  name: string
+  email: string
+  passwordHash: string
+  role: Role
+  isActive: boolean
+  avatarId?: UniqueEntityID | null
+  addresses: UserAddressList
+  createdAt: Date
+  updatedAt?: Date
+}
+
+export class User extends AggregateRoot<UserProps> {
+  get name() {
+    return this.props.name
+  }
+
+  get email() {
+    return this.props.email
+  }
+
+  get passwordHash() {
+    return this.props.passwordHash
+  }
+
+  get role() {
+    return this.props.role
+  }
+
+  get isActive() {
+    return this.props.isActive
+  }
+
+  get avatarId() {
+    return this.props.avatarId
+  }
+
+  get addresses() {
+    return this.props.addresses
+  }
+
+  get createdAt() {
+    return this.props.createdAt
+  }
+
+  get updatedAt() {
+    return this.props.updatedAt
+  }
+
+  updateName(value: string) {
+    this.props.name = value
+    this.touch()
+  }
+
+  updateRole(value: Role) {
+    this.props.role = value
+    this.touch()
+  }
+
+  toggleActive() {
+    this.props.isActive = !this.props.isActive
+    this.touch()
+  }
+
+  updateAvatar(value: UniqueEntityID | undefined | null) {
+    this.props.avatarId = value
+    this.touch()
+  }
+
+  updateAddress(addresses: UserAddressList) {
+    this.props.addresses = addresses
+    this.touch()
+  }
+
+  updatePassword(hash: string) {
+    this.addDomainEvent(new UserPasswordChangedEvent(this))
+
+    this.props.passwordHash = hash
+    this.touch()
+  }
+
+  private touch() {
+    this.props.updatedAt = new Date()
+  }
+
+  static create(
+    props: Optional<UserProps, 'createdAt' | 'addresses'>,
+    id?: UniqueEntityID,
+  ) {
+    const now = new Date()
+    const user = new User(
+      {
+        ...props,
+        role: props.role ?? 'OPERATOR',
+        addresses: props.addresses ?? new UserAddressList(),
+        isActive: props.isActive ?? true,
+        createdAt: props.createdAt ?? now,
+        updatedAt: props.updatedAt ?? now,
+      },
+      id,
+    )
+    return user
   }
 }
 </file>
@@ -9318,134 +10031,6 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 }
 </file>
 
-<file path="src/infra/database/prisma/repositories/user/prisma-users-repository.ts">
-import type { PaginationParams } from '@/core/repositories/pagination-params'
-import type { UsersRepository } from '@/domain/user/application/repositories/user-repository'
-import { User } from '@/domain/user/enterprise/entities/user'
-import { Injectable } from '@nestjs/common'
-import { CacheRepository } from '@/infra/cache/cache-repository'
-import { PrismaService } from '../../prisma.service'
-import { PrismaUserMapper } from '../../mappers/user/prisma-user.mapper'
-
-@Injectable()
-export class PrismaUsersRepository implements UsersRepository {
-  constructor(
-    private prisma: PrismaService,
-    private cache: CacheRepository,
-  ) {}
-
-  async findById(id: string): Promise<User | null> {
-    const cacheHit = await this.cache.get(`user:${id}:details`)
-
-    if (cacheHit) {
-      const cachedData = JSON.parse(cacheHit)
-
-      return PrismaUserMapper.toDomain(cachedData)
-    }
-
-    const user = await this.prisma.user.findFirst({
-      where: {
-        id,
-      },
-      include: {
-        addresses: true,
-      },
-    })
-
-    if (!user) {
-      return null
-    }
-
-    await this.cache.set(`user:${id}:details`, JSON.stringify(user))
-
-    return PrismaUserMapper.toDomain(user)
-  }
-
-  async findByEmail(email: string): Promise<User | null> {
-    const user = await this.prisma.user.findFirst({
-      where: {
-        email,
-      },
-      include: {
-        addresses: true,
-      },
-    })
-
-    if (!user) {
-      return null
-    }
-
-    const userDetails = PrismaUserMapper.toDomain(user)
-
-    return userDetails
-  }
-
-  async list({
-    page = 1,
-    perPage = 20,
-  }: PaginationParams): Promise<[User[], number]> {
-    const cacheHit = await this.cache.get(`users:page:${page}:${perPage}`)
-
-    if (cacheHit) {
-      const cachedData = JSON.parse(cacheHit)
-
-      return cachedData.map(PrismaUserMapper.toDomain)
-    }
-
-    const [users, total] = await this.prisma.$transaction([
-      this.prisma.user.findMany({
-        orderBy: { createdAt: 'desc' },
-        skip: (page - 1) * perPage,
-        take: perPage,
-        include: {
-          addresses: true,
-        },
-      }),
-      this.prisma.user.count(),
-    ])
-
-    await this.cache.set(`users:page:${page}:${perPage}`, JSON.stringify(users))
-
-    return [users.map(PrismaUserMapper.toDomain), total]
-  }
-
-  async save(user: User): Promise<void> {
-    const data = PrismaUserMapper.toPrisma(user)
-
-    await Promise.all([
-      this.prisma.user.update({
-        where: { id: data.id },
-        data,
-      }),
-      this.cache.del(`user:${data.id}:details`),
-    ])
-  }
-
-  async create(user: User): Promise<void> {
-    const data = PrismaUserMapper.toPrisma(user)
-
-    await Promise.all([
-      this.prisma.user.create({
-        data,
-      }),
-      this.cache.del('users'),
-    ])
-  }
-
-  async delete(user: User): Promise<void> {
-    const data = PrismaUserMapper.toPrisma(user)
-
-    await Promise.all([
-      this.prisma.user.delete({
-        where: { id: data.id },
-      }),
-      this.cache.del(`user:${data.id}:details`),
-      this.cache.del(`users`),
-    ])
-  }
-}
-</file>
-
 <file path="src/infra/http/controllers/user/__tests__/authenticate-user.controller.e2e-spec.ts">
 import { UserFactory } from 'test/factories/make-user'
 import { INestApplication, VersioningType } from '@nestjs/common'
@@ -9769,6 +10354,137 @@ export class AuthenticateUserUseCase {
       refreshToken,
       expiresIn: accessToken.expiresIn,
     })
+  }
+}
+</file>
+
+<file path="src/infra/database/prisma/repositories/user/prisma-users-repository.ts">
+import type { PaginationParams } from '@/core/repositories/pagination-params'
+import type { UsersRepository } from '@/domain/user/application/repositories/user-repository'
+import { User } from '@/domain/user/enterprise/entities/user'
+import { Injectable } from '@nestjs/common'
+import { CacheRepository } from '@/infra/cache/cache-repository'
+import { PrismaService } from '../../prisma.service'
+import { PrismaUserMapper } from '../../mappers/user/prisma-user.mapper'
+import { DomainEvents } from '@/core/events/domain-events'
+
+@Injectable()
+export class PrismaUsersRepository implements UsersRepository {
+  constructor(
+    private prisma: PrismaService,
+    private cache: CacheRepository,
+  ) {}
+
+  async findById(id: string): Promise<User | null> {
+    const cacheHit = await this.cache.get(`user:${id}:details`)
+
+    if (cacheHit) {
+      const cachedData = JSON.parse(cacheHit)
+
+      return PrismaUserMapper.toDomain(cachedData)
+    }
+
+    const user = await this.prisma.user.findFirst({
+      where: {
+        id,
+      },
+      include: {
+        addresses: true,
+      },
+    })
+
+    if (!user) {
+      return null
+    }
+
+    await this.cache.set(`user:${id}:details`, JSON.stringify(user))
+
+    return PrismaUserMapper.toDomain(user)
+  }
+
+  async findByEmail(email: string): Promise<User | null> {
+    const user = await this.prisma.user.findFirst({
+      where: {
+        email,
+      },
+      include: {
+        addresses: true,
+      },
+    })
+
+    if (!user) {
+      return null
+    }
+
+    const userDetails = PrismaUserMapper.toDomain(user)
+
+    return userDetails
+  }
+
+  async list({
+    page = 1,
+    perPage = 20,
+  }: PaginationParams): Promise<[User[], number]> {
+    const cacheHit = await this.cache.get(`users:page:${page}:${perPage}`)
+
+    if (cacheHit) {
+      const cachedData = JSON.parse(cacheHit)
+
+      return cachedData.map(PrismaUserMapper.toDomain)
+    }
+
+    const [users, total] = await this.prisma.$transaction([
+      this.prisma.user.findMany({
+        orderBy: { createdAt: 'desc' },
+        skip: (page - 1) * perPage,
+        take: perPage,
+        include: {
+          addresses: true,
+        },
+      }),
+      this.prisma.user.count(),
+    ])
+
+    await this.cache.set(`users:page:${page}:${perPage}`, JSON.stringify(users))
+
+    return [users.map(PrismaUserMapper.toDomain), total]
+  }
+
+  async save(user: User): Promise<void> {
+    const data = PrismaUserMapper.toPrisma(user)
+
+    await Promise.all([
+      this.prisma.user.update({
+        where: { id: data.id },
+        data,
+      }),
+      this.cache.del(`user:${data.id}:details`),
+    ])
+
+    DomainEvents.dispatchEventsForAggregate(user.id)
+  }
+
+  async create(user: User): Promise<void> {
+    const data = PrismaUserMapper.toPrisma(user)
+
+    await Promise.all([
+      this.prisma.user.create({
+        data,
+      }),
+      this.cache.del('users'),
+    ])
+  }
+
+  async delete(user: User): Promise<void> {
+    const data = PrismaUserMapper.toPrisma(user)
+
+    await Promise.all([
+      this.prisma.user.delete({
+        where: { id: data.id },
+      }),
+      this.cache.del(`user:${data.id}:details`),
+      this.cache.del(`users`),
+    ])
   }
 }
 </file>
