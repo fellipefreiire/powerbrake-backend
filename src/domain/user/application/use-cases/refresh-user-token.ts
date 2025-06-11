@@ -1,6 +1,6 @@
 import { left, right, type Either } from '@/core/either'
 import { Injectable } from '@nestjs/common'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { JwtService } from '@nestjs/jwt'
 import { UserUnauthorizedError } from './errors/user-unauthorized-error'
@@ -30,7 +30,7 @@ export class RefreshUserTokenUseCase {
   constructor(
     private jwtService: JwtService,
     private tokenService: TokenService,
-    private refreshTokenRepository: RefreshTokenRepository,
+    private refreshTokenService: RefreshTokenService,
   ) {}
 
   async execute({
@@ -48,7 +48,7 @@ export class RefreshUserTokenUseCase {
       return left(new UserUnauthorizedError())
     }
 
-    const isValid = await this.refreshTokenRepository.validate(payload.jti)
+    const isValid = await this.refreshTokenService.validate(payload.jti)
 
     if (!isValid) {
       return left(new UserUnauthorizedError())

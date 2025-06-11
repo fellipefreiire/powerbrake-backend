@@ -8,12 +8,16 @@ import request from 'supertest'
 import { User } from '@/domain/user/enterprise/entities/user'
 import { FakeMailer } from 'test/cryptography/fake-mailer'
 import { MailRepository } from '@/infra/mail/mail-repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
+import { RedisService } from '@/infra/cache/redis/redis.service'
 
 describe('Reset Password Flow (Integration)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
   let mailer: FakeMailer
+  let refreshTokenService: RefreshTokenService
+  let redis: RedisService
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -32,6 +36,8 @@ describe('Reset Password Flow (Integration)', () => {
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     mailer = moduleRef.get(MailRepository) as FakeMailer
+    refreshTokenService = moduleRef.get(RefreshTokenService)
+    redis = moduleRef.get(RedisService)
 
     await app.init()
   })
@@ -53,18 +59,21 @@ describe('Reset Password Flow (Integration)', () => {
       passwordHash: 'old-password',
     })
 
+    const refreshToken = await refreshTokenService.create(user.id.toString())
+
     await request(app.getHttpServer())
       .post('/v1/users/forgot-password')
       .send({ email: user.email })
       .expect(204)
 
     expect(mailer.sent).toHaveLength(1)
+
     const html = mailer.sent[0].html
     const tokenMatch = html.match(/token=([a-zA-Z0-9._-]+)/)
     const token = tokenMatch?.[1]
 
     expect(token).toBeDefined()
-    expect(token).toBeDefined()
+
     await request(app.getHttpServer())
       .post('/v1/users/reset-password')
       .send({
@@ -72,9 +81,15 @@ describe('Reset Password Flow (Integration)', () => {
         password: 'new-password',
       })
       .expect(204)
+
     const updatedUser = await prisma.user.findUniqueOrThrow({
       where: { id: user.id.toString() },
     })
+
     expect(updatedUser.passwordHash).not.toBe(user.passwordHash)
+
+    // verifica se o refresh token foi revogado
+    const storedToken = await redis.get(`refresh_token:${refreshToken}`)
+    expect(storedToken).toBeNull()
   })
 })

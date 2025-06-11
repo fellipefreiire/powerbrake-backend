@@ -6,7 +6,7 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { JwtService } from '@nestjs/jwt'
 import { UserFactory } from 'test/factories/make-user'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { randomUUID } from 'node:crypto'
 
@@ -16,7 +16,7 @@ describe('Refresh Token (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let refreshTokenRepository: RefreshTokenRepository
+  let refreshTokenService: RefreshTokenService
   let adminUser: User
   let jwt: JwtService
 
@@ -33,7 +33,7 @@ describe('Refresh Token (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
-    refreshTokenRepository = moduleRef.get(RefreshTokenRepository)
+    refreshTokenService = moduleRef.get(RefreshTokenService)
     jwt = moduleRef.get(JwtService)
 
     await app.init()
@@ -61,7 +61,7 @@ describe('Refresh Token (E2E)', () => {
   })
 
   it('[200] OK → should return new access token from valid refresh token', async () => {
-    const jti = await refreshTokenRepository.create(adminUser.id.toString())
+    const jti = await refreshTokenService.create(adminUser.id.toString())
 
     const refreshToken = jwt.sign(
       {
@@ -105,7 +105,7 @@ describe('Refresh Token (E2E)', () => {
   })
 
   it('[401] Unauthorized → should return error for expired refresh token', async () => {
-    const jti = await refreshTokenRepository.create(adminUser.id.toString())
+    const jti = await refreshTokenService.create(adminUser.id.toString())
 
     const expiredToken = jwt.sign(
       {

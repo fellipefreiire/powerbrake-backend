@@ -7,7 +7,7 @@ import { JwtAuthGuard } from './jwt-auth.guard'
 import { EnvService } from '../env/env.service'
 import { EnvModule } from '../env/env.module'
 import { TokenService } from './token.service'
-import { RefreshTokenRepository } from './refresh-token.repository'
+import { RefreshTokenService } from './refresh-token.service'
 import { CryptographyModule } from '../cryptography/cryptography.module'
 import { CacheModule } from '../cache/cache.module'
 
@@ -36,12 +36,12 @@ import { CacheModule } from '../cache/cache.module'
     JwtStrategy,
     EnvService,
     TokenService,
-    RefreshTokenRepository,
+    RefreshTokenService,
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
   ],
-  exports: [TokenService, RefreshTokenRepository],
+  exports: [TokenService, RefreshTokenService],
 })
 export class AuthModule {}

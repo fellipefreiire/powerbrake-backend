@@ -1,7 +1,7 @@
 import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/refresh-user-token'
 import { UserUnauthorizedError } from '@/domain/user/application/use-cases/errors/user-unauthorized-error'
 import { TokenService } from '@/infra/auth/token.service'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { JwtService } from '@nestjs/jwt'
 import type { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
 import type { Role } from '@prisma/client'
@@ -9,7 +9,7 @@ import type { Role } from '@prisma/client'
 let sut: RefreshUserTokenUseCase
 let jwtService: JwtService
 let tokenService: TokenService
-let refreshTokenRepository: RefreshTokenRepository
+let refreshTokenService: RefreshTokenService
 
 const validPayload: RefreshTokenPayload = {
   sub: 'user-id-123',
@@ -29,14 +29,14 @@ describe('Refresh User Token', () => {
       generateAccessToken: vi.fn(),
     } as unknown as TokenService
 
-    refreshTokenRepository = {
+    refreshTokenService = {
       validate: vi.fn(),
-    } as unknown as RefreshTokenRepository
+    } as unknown as RefreshTokenService
 
     sut = new RefreshUserTokenUseCase(
       jwtService,
       tokenService,
-      refreshTokenRepository,
+      refreshTokenService,
     )
   })
 
@@ -60,7 +60,7 @@ describe('Refresh User Token', () => {
 
   it('should not allow refreshing if jti is not valid in repository', async () => {
     vi.spyOn(jwtService, 'verify').mockReturnValue(validPayload)
-    vi.spyOn(refreshTokenRepository, 'validate').mockResolvedValue(false)
+    vi.spyOn(refreshTokenService, 'validate').mockResolvedValue(false)
 
     const result = await sut.execute({ refreshToken: 'valid.token' })
 
@@ -70,7 +70,7 @@ describe('Refresh User Token', () => {
 
   it('should generate new access token if refresh token is valid', async () => {
     vi.spyOn(jwtService, 'verify').mockReturnValue(validPayload)
-    vi.spyOn(refreshTokenRepository, 'validate').mockResolvedValue(true)
+    vi.spyOn(refreshTokenService, 'validate').mockResolvedValue(true)
     vi.spyOn(tokenService, 'generateAccessToken').mockResolvedValue({
       token: 'access-token-abc',
       expiresIn: 9999,

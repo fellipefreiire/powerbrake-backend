@@ -4,14 +4,14 @@ import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-
 import { makeUser } from 'test/factories/make-user'
 import { FakeHasher } from 'test/cryptography/fake-hasher'
 import { TokenService } from '@/infra/auth/token.service'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { Role } from '@prisma/client'
 
 let sut: AuthenticateUserUseCase
 let usersRepository: InMemoryUsersRepository
 let hasher: FakeHasher
 let tokenService: TokenService
-let refreshTokenRepository: RefreshTokenRepository
+let refreshTokenService: RefreshTokenService
 
 describe('Authenticate User', () => {
   beforeEach(() => {
@@ -29,17 +29,17 @@ describe('Authenticate User', () => {
       }),
     } as unknown as TokenService
 
-    refreshTokenRepository = {
+    refreshTokenService = {
       create: vi.fn().mockResolvedValue('fake-jti'),
       validate: vi.fn(),
       revoke: vi.fn(),
-    } as unknown as RefreshTokenRepository
+    } as unknown as RefreshTokenService
 
     sut = new AuthenticateUserUseCase(
       usersRepository,
       hasher,
       tokenService,
-      refreshTokenRepository,
+      refreshTokenService,
     )
   })
 

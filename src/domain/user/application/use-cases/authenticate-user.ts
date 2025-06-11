@@ -4,7 +4,7 @@ import { Injectable } from '@nestjs/common'
 import { WrongCredentialsError } from './errors/wrong-credentials-error'
 import { HashComparer } from '../../../../shared/cryptography/hash-comparer'
 import { UserInactiveError } from './errors/user-inactive-error'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { TokenService } from '@/infra/auth/token.service'
 
 type AuthenticateUserUseCaseRequest = {
@@ -33,7 +33,7 @@ export class AuthenticateUserUseCase {
     private usersRepository: UsersRepository,
     private hashComparar: HashComparer,
     private tokenService: TokenService,
-    private refreshTokenRepository: RefreshTokenRepository,
+    private refreshTokenService: RefreshTokenService,
   ) {}
 
   async execute({
@@ -64,7 +64,7 @@ export class AuthenticateUserUseCase {
       role: user.role,
     })
 
-    const jti = await this.refreshTokenRepository.create(user.id.toString())
+    const jti = await this.refreshTokenService.create(user.id.toString())
 
     const refreshToken = await this.tokenService.generateRefreshToken({
       sub: user.id.toString(),

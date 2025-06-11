@@ -3,7 +3,7 @@ import { RedisService } from '@/infra/cache/redis/redis.service'
 import { randomUUID } from 'crypto'
 
 @Injectable()
-export class RefreshTokenRepository {
+export class RefreshTokenService {
   private EXPIRATION_SECONDS = 60 * 60 * 24 * 7 // 7 days
 
   constructor(private redis: RedisService) {}
@@ -23,6 +23,23 @@ export class RefreshTokenRepository {
 
   async revoke(jti: string): Promise<void> {
     await this.redis.del(this.key(jti))
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    const keys = await this.redis.keys(`refresh_token:*`)
+    const tokens = await Promise.all(
+      keys.map(async (key) => {
+        const uid = await this.redis.get(key)
+        return { key, uid }
+      }),
+    )
+    const keysToDelete = tokens
+      .filter((t) => t.uid === userId)
+      .map((t) => t.key)
+
+    if (keysToDelete.length) {
+      await this.redis.del(...keysToDelete)
+    }
   }
 
   private key(jti: string): string {

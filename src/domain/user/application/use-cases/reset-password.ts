@@ -5,6 +5,7 @@ import { TokenVerifier } from '@/shared/cryptography/token-verifier'
 import { left, right, type Either } from '@/core/either'
 import { UserNotFoundError } from './errors/user-not-found'
 import { UserUnauthorizedError } from './errors/user-unauthorized-error'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 
 type ResetPasswordRequest = {
   token: string
@@ -26,6 +27,7 @@ export class ResetPasswordUseCase {
     private tokenVerifier: TokenVerifier,
     private usersRepository: UsersRepository,
     private hashGenerator: HashGenerator,
+    private refreshTokenService: RefreshTokenService,
   ) {}
 
   async execute({
@@ -51,6 +53,7 @@ export class ResetPasswordUseCase {
     user.updatePassword(passwordHash)
 
     await this.usersRepository.save(user)
+    await this.refreshTokenService.revokeAllForUser(user.id.toString())
 
     return right(undefined)
   }

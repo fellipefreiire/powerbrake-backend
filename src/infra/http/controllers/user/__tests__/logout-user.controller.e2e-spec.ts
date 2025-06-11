@@ -4,14 +4,14 @@ import request from 'supertest'
 import { AppModule } from '@/infra/app.module'
 import { UserFactory } from 'test/factories/make-user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { JwtService } from '@nestjs/jwt'
 
 describe('Logout User (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
-  let refreshTokenRepository: RefreshTokenRepository
+  let refreshTokenService: RefreshTokenService
   let jwt: JwtService
 
   const endpoint = '/v1/users/logout'
@@ -28,7 +28,7 @@ describe('Logout User (E2E)', () => {
     prisma = moduleRef.get(PrismaService)
     jwt = moduleRef.get(JwtService)
     userFactory = moduleRef.get(UserFactory)
-    refreshTokenRepository = moduleRef.get(RefreshTokenRepository)
+    refreshTokenService = moduleRef.get(RefreshTokenService)
 
     await app.init()
   })
@@ -46,7 +46,7 @@ describe('Logout User (E2E)', () => {
   it('[204] OK → should logout user and revoke refresh token', async () => {
     const user = await userFactory.makePrismaUser()
 
-    const jti = await refreshTokenRepository.create(user.id.toString())
+    const jti = await refreshTokenService.create(user.id.toString())
 
     const now = Math.floor(Date.now() / 1000)
     const exp = now + 60 * 60 * 24 * 7 // 7 days

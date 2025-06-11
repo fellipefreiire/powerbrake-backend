@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { makeUser } from 'test/factories/make-user'
 import { FakeHasher } from 'test/cryptography/fake-hasher'
 import { FakeTokenVerifier } from 'test/cryptography/fake-token-verifier'
@@ -7,10 +7,13 @@ import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-
 import { ResetPasswordUseCase } from '../reset-password'
 import { UserNotFoundError } from '../errors'
 import { UserUnauthorizedError } from '../errors/user-unauthorized-error'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
+import { RedisService } from '@/infra/cache/redis/redis.service'
 
 let usersRepository: InMemoryUsersRepository
 let tokenVerifier: FakeTokenVerifier
 let hashGenerator: FakeHasher
+let refreshTokenService: RefreshTokenService
 let sut: ResetPasswordUseCase
 
 const fakeToken = 'valid.token'
@@ -24,10 +27,20 @@ describe('Reset Password', () => {
     tokenVerifier = new FakeTokenVerifier()
     hashGenerator = new FakeHasher()
 
+    const redisMock = {
+      set: vi.fn(),
+      get: vi.fn(),
+      del: vi.fn(),
+      keys: vi.fn().mockResolvedValue([]),
+    } as unknown as RedisService
+
+    refreshTokenService = new RefreshTokenService(redisMock)
+
     sut = new ResetPasswordUseCase(
       tokenVerifier,
       usersRepository,
       hashGenerator,
+      refreshTokenService,
     )
   })
 
@@ -66,5 +79,31 @@ describe('Reset Password', () => {
 
     expect(result.isLeft()).toBe(true)
     expect(result.value).toBeInstanceOf(UserUnauthorizedError)
+  })
+
+  it('should reset the password and revoke all refresh tokens', async () => {
+    const user = makeUser({
+      email: 'john@example.com',
+      passwordHash: 'old-hash',
+    })
+    await usersRepository.create(user)
+
+    tokenVerifier.setTokenPayload(fakeToken, { sub: user.id.toString() })
+
+    const revokeSpy = vi
+      .spyOn(refreshTokenService, 'revokeAllForUser')
+      .mockResolvedValue()
+
+    const result = await sut.execute({
+      token: fakeToken,
+      password: 'new-password',
+    })
+
+    expect(result.isRight()).toBe(true)
+
+    const updatedUser = await usersRepository.findById(user.id.toString())
+    expect(updatedUser?.passwordHash).toBe('new-password-hashed')
+
+    expect(revokeSpy).toHaveBeenCalledWith(user.id.toString())
   })
 })
