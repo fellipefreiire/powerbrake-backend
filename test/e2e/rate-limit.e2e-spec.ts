@@ -23,11 +23,14 @@ describe('Rate Limit (E2E)', () => {
   it('should return 429 after too many requests', async () => {
     const server = app.getHttpServer()
 
-    const results = await Promise.all(
-      Array.from({ length: 11 }).map(() => request(server).get('/health')),
-    )
+    let lastResponse
 
-    const lastResponse = results[results.length - 1]
+    for (let i = 0; i < 11; i++) {
+      lastResponse = await request(server)
+        .get('/health')
+        .set('X-Forwarded-For', '127.0.0.1')
+    }
+
     expect(lastResponse.statusCode).toBe(429)
   }, 10000)
 })
