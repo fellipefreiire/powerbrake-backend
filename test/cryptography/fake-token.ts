@@ -1,19 +1,15 @@
-import { Injectable } from '@nestjs/common'
-import { Encrypter } from '@/shared/cryptography/encrypter'
-import { TokenRepository } from './token-repository'
+import { TokenRepository } from '@/infra/auth/token-repository'
 
-@Injectable()
-export class TokenService implements TokenRepository {
-  constructor(private encrypter: Encrypter) {}
-
+export class FakeTokenService implements TokenRepository {
   async generateAccessToken(payload: { sub: string; role: string }) {
     const now = Math.floor(Date.now() / 1000)
     const exp = now + 60 * 60 // 1 hour
 
-    const token = await this.encrypter.encrypt({
+    const token = JSON.stringify({
       ...payload,
       iat: now,
       exp,
+      typ: 'access',
     })
 
     return { token, expiresIn: exp }
@@ -27,16 +23,17 @@ export class TokenService implements TokenRepository {
     const now = Math.floor(Date.now() / 1000)
     const exp = now + 60 * 60 * 24 * 7 // 7 days
 
-    const token = await this.encrypter.encrypt({
+    const token = JSON.stringify({
       ...payload,
       iat: now,
       exp,
+      typ: 'refresh',
     })
 
     return { token, expiresIn: exp }
   }
 
   async generate(payload: Record<string, unknown>) {
-    return this.encrypter.encrypt(payload)
+    return JSON.stringify(payload)
   }
 }

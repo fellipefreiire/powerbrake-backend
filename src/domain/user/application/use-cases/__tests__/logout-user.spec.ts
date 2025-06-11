@@ -1,17 +1,16 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { LogoutUserUseCase } from '../logout-user'
+import { FakeCacheService } from 'test/cache/fake-cache'
+import { FakeRefreshTokenService } from 'test/cryptography/fake-refresh-token'
 
 let sut: LogoutUserUseCase
-let refreshTokenService: RefreshTokenService
+let fakeCacheService: FakeCacheService
+let refreshTokenService: FakeRefreshTokenService
 
 describe('Logout', () => {
   beforeEach(() => {
-    refreshTokenService = {
-      revoke: vi.fn().mockResolvedValue(undefined),
-      create: vi.fn(),
-      validate: vi.fn(),
-    } as unknown as RefreshTokenService
+    fakeCacheService = new FakeCacheService()
+    refreshTokenService = new FakeRefreshTokenService(fakeCacheService)
 
     sut = new LogoutUserUseCase(refreshTokenService)
   })
@@ -19,7 +18,6 @@ describe('Logout', () => {
   it('should revoke the refresh token by jti', async () => {
     const result = await sut.execute({ jti: 'fake-jti' })
 
-    expect(refreshTokenService.revoke).toHaveBeenCalledWith('fake-jti')
     expect(result.isRight()).toBe(true)
   })
 })

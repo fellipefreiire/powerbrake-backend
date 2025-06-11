@@ -6,23 +6,25 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import request from 'supertest'
 import { User } from '@/domain/user/enterprise/entities/user'
-import { FakeMailer } from 'test/cryptography/fake-mailer'
+import { FakeMailer } from 'test/mail/fake-mailer'
 import { MailRepository } from '@/infra/mail/mail-repository'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { RedisService } from '@/infra/cache/redis/redis.service'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
+import { CacheModule } from '@/infra/cache/cache.module'
+import { EnvModule } from '@/infra/env/env.module'
 
 describe('Reset Password Flow (Integration)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
   let mailer: FakeMailer
+  let cacheService: RedisService
   let refreshTokenService: RefreshTokenService
-  let redis: RedisService
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory, FakeMailer],
+      imports: [AppModule, UserDatabaseModule, CacheModule, EnvModule],
+      providers: [UserFactory, FakeMailer, RefreshTokenService, RedisService],
     })
       .overrideProvider(MailRepository)
       .useClass(FakeMailer)
@@ -36,8 +38,8 @@ describe('Reset Password Flow (Integration)', () => {
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     mailer = moduleRef.get(MailRepository) as FakeMailer
+    cacheService = moduleRef.get(RedisService)
     refreshTokenService = moduleRef.get(RefreshTokenService)
-    redis = moduleRef.get(RedisService)
 
     await app.init()
   })
@@ -88,8 +90,7 @@ describe('Reset Password Flow (Integration)', () => {
 
     expect(updatedUser.passwordHash).not.toBe(user.passwordHash)
 
-    // verifica se o refresh token foi revogado
-    const storedToken = await redis.get(`refresh_token:${refreshToken}`)
+    const storedToken = await cacheService.get(`refresh_token:${refreshToken}`)
     expect(storedToken).toBeNull()
   })
 })

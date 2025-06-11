@@ -7,6 +7,7 @@ import { UserFactory } from 'test/factories/make-user'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { TokenService } from '@/infra/auth/token.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 const createUserEndpoint = '/v1/users'
 
@@ -28,8 +29,8 @@ describe('Create User (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

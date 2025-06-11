@@ -4,7 +4,7 @@ import { FakeEncrypter } from 'test/cryptography/fake-encrypter'
 import { makeUser } from 'test/factories/make-user'
 import { ForgotPasswordUseCase } from '../forgot-password'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
-import { FakeMailer } from 'test/cryptography/fake-mailer'
+import { FakeMailer } from 'test/mail/fake-mailer'
 
 let usersRepository: InMemoryUsersRepository
 let encrypter: FakeEncrypter

@@ -7,6 +7,8 @@ import request from 'supertest'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { TokenService } from '@/infra/auth/token.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 const authenticateUserEndpoint = '/v1/users/login'
 
@@ -18,8 +20,8 @@ describe('Authenticate User (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

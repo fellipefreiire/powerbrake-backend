@@ -9,6 +9,7 @@ import { User } from '@/domain/user/enterprise/entities/user'
 import { Uploader } from '@/shared/storage/uploader'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 describe('Upload Avatar (E2E)', () => {
   let app: INestApplication
@@ -24,8 +25,13 @@ describe('Upload Avatar (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, AvatarDatabaseModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [
+        AppModule,
+        AvatarDatabaseModule,
+        UserDatabaseModule,
+        CryptographyModule,
+      ],
+      providers: [UserFactory, TokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

@@ -4,8 +4,8 @@ import { Injectable } from '@nestjs/common'
 import { WrongCredentialsError } from './errors/wrong-credentials-error'
 import { HashComparer } from '../../../../shared/cryptography/hash-comparer'
 import { UserInactiveError } from './errors/user-inactive-error'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
-import { TokenService } from '@/infra/auth/token.service'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { TokenRepository } from '@/infra/auth/token-repository'
 
 type AuthenticateUserUseCaseRequest = {
   email: string
@@ -32,8 +32,8 @@ export class AuthenticateUserUseCase {
   constructor(
     private usersRepository: UsersRepository,
     private hashComparar: HashComparer,
-    private tokenService: TokenService,
-    private refreshTokenService: RefreshTokenService,
+    private tokenRepository: TokenRepository,
+    private refreshTokenRepository: RefreshTokenRepository,
   ) {}
 
   async execute({
@@ -59,14 +59,14 @@ export class AuthenticateUserUseCase {
       return left(new WrongCredentialsError())
     }
 
-    const accessToken = await this.tokenService.generateAccessToken({
+    const accessToken = await this.tokenRepository.generateAccessToken({
       sub: user.id.toString(),
       role: user.role,
     })
 
-    const jti = await this.refreshTokenService.create(user.id.toString())
+    const jti = await this.refreshTokenRepository.create(user.id.toString())
 
-    const refreshToken = await this.tokenService.generateRefreshToken({
+    const refreshToken = await this.tokenRepository.generateRefreshToken({
       sub: user.id.toString(),
       role: user.role,
       jti,

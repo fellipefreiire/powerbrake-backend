@@ -10,6 +10,8 @@ import { TokenService } from './token.service'
 import { RefreshTokenService } from './refresh-token.service'
 import { CryptographyModule } from '../cryptography/cryptography.module'
 import { CacheModule } from '../cache/cache.module'
+import { RefreshTokenRepository } from './refresh-token.repository'
+import { TokenRepository } from './token-repository'
 
 @Module({
   imports: [
@@ -35,13 +37,19 @@ import { CacheModule } from '../cache/cache.module'
   providers: [
     JwtStrategy,
     EnvService,
-    TokenService,
-    RefreshTokenService,
+    {
+      provide: TokenRepository,
+      useClass: TokenService,
+    },
+    {
+      provide: RefreshTokenRepository,
+      useClass: RefreshTokenService,
+    },
     {
       provide: APP_GUARD,
       useClass: JwtAuthGuard,
     },
   ],
-  exports: [TokenService, RefreshTokenService],
+  exports: [TokenRepository, RefreshTokenRepository],
 })
 export class AuthModule {}

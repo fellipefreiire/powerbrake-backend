@@ -9,6 +9,7 @@ import type { User } from '@/domain/user/enterprise/entities/user'
 import { Role } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 import { TokenService } from '@/infra/auth/token.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 describe('Find User By Id (E2E)', () => {
   let app: INestApplication
@@ -29,8 +30,8 @@ describe('Find User By Id (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

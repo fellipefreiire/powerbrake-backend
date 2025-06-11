@@ -6,6 +6,8 @@ import { UserFactory } from 'test/factories/make-user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { JwtService } from '@nestjs/jwt'
+import { CacheModule } from '@/infra/cache/cache.module'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 describe('Logout User (E2E)', () => {
   let app: INestApplication
@@ -18,8 +20,8 @@ describe('Logout User (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule],
-      providers: [UserFactory],
+      imports: [AppModule, CacheModule, CryptographyModule],
+      providers: [UserFactory, RefreshTokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

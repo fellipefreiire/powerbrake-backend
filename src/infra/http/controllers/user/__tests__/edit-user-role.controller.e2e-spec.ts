@@ -9,6 +9,7 @@ import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { Role } from '@prisma/client'
 import { randomUUID } from 'node:crypto'
 import { TokenService } from '@/infra/auth/token.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 describe('Edit User Role (E2E)', () => {
   let app: INestApplication
@@ -34,8 +35,8 @@ describe('Edit User Role (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

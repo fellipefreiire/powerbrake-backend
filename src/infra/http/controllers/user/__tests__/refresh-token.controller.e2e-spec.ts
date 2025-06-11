@@ -9,6 +9,7 @@ import { UserFactory } from 'test/factories/make-user'
 import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { randomUUID } from 'node:crypto'
+import { CacheModule } from '@/infra/cache/cache.module'
 
 const refreshTokenEndpoint = '/v1/users/refresh'
 
@@ -22,8 +23,8 @@ describe('Refresh Token (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [AppModule, UserDatabaseModule, CacheModule],
+      providers: [UserFactory, RefreshTokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

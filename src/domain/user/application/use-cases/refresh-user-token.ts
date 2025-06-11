@@ -1,10 +1,10 @@
 import { left, right, type Either } from '@/core/either'
 import { Injectable } from '@nestjs/common'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
-import { TokenService } from '@/infra/auth/token.service'
 import { JwtService } from '@nestjs/jwt'
 import { UserUnauthorizedError } from './errors/user-unauthorized-error'
-import type { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
+import { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { TokenRepository } from '@/infra/auth/token-repository'
 
 type RefreshUserTokenUseCaseRequest = {
   refreshToken: string
@@ -29,8 +29,8 @@ type RefreshUserTokenUseCaseResponse = Either<
 export class RefreshUserTokenUseCase {
   constructor(
     private jwtService: JwtService,
-    private tokenService: TokenService,
-    private refreshTokenService: RefreshTokenService,
+    private tokenRepository: TokenRepository,
+    private refreshTokenRepository: RefreshTokenRepository,
   ) {}
 
   async execute({
@@ -48,13 +48,13 @@ export class RefreshUserTokenUseCase {
       return left(new UserUnauthorizedError())
     }
 
-    const isValid = await this.refreshTokenService.validate(payload.jti)
+    const isValid = await this.refreshTokenRepository.validate(payload.jti)
 
     if (!isValid) {
       return left(new UserUnauthorizedError())
     }
 
-    const accessToken = await this.tokenService.generateAccessToken({
+    const accessToken = await this.tokenRepository.generateAccessToken({
       sub: payload.sub,
       role: payload.role,
     })

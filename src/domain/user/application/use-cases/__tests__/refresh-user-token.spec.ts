@@ -1,15 +1,17 @@
 import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/refresh-user-token'
 import { UserUnauthorizedError } from '@/domain/user/application/use-cases/errors/user-unauthorized-error'
-import { TokenService } from '@/infra/auth/token.service'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import { JwtService } from '@nestjs/jwt'
 import type { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
 import type { Role } from '@prisma/client'
+import { FakeCacheService } from 'test/cache/fake-cache'
+import { FakeRefreshTokenService } from 'test/cryptography/fake-refresh-token'
+import { FakeTokenService } from 'test/cryptography/fake-token'
 
 let sut: RefreshUserTokenUseCase
 let jwtService: JwtService
-let tokenService: TokenService
-let refreshTokenService: RefreshTokenService
+let fakeTokenService: FakeTokenService
+let fakeCacheService: FakeCacheService
+let refreshTokenService: FakeRefreshTokenService
 
 const validPayload: RefreshTokenPayload = {
   sub: 'user-id-123',
@@ -25,17 +27,13 @@ describe('Refresh User Token', () => {
       verify: vi.fn(),
     } as unknown as JwtService
 
-    tokenService = {
-      generateAccessToken: vi.fn(),
-    } as unknown as TokenService
-
-    refreshTokenService = {
-      validate: vi.fn(),
-    } as unknown as RefreshTokenService
+    fakeTokenService = new FakeTokenService()
+    fakeCacheService = new FakeCacheService()
+    refreshTokenService = new FakeRefreshTokenService(fakeCacheService)
 
     sut = new RefreshUserTokenUseCase(
       jwtService,
-      tokenService,
+      fakeTokenService,
       refreshTokenService,
     )
   })
@@ -71,7 +69,7 @@ describe('Refresh User Token', () => {
   it('should generate new access token if refresh token is valid', async () => {
     vi.spyOn(jwtService, 'verify').mockReturnValue(validPayload)
     vi.spyOn(refreshTokenService, 'validate').mockResolvedValue(true)
-    vi.spyOn(tokenService, 'generateAccessToken').mockResolvedValue({
+    vi.spyOn(fakeTokenService, 'generateAccessToken').mockResolvedValue({
       token: 'access-token-abc',
       expiresIn: 9999,
     })

@@ -6,6 +6,7 @@ import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { UserFactory } from 'test/factories/make-user'
 import { TokenService } from '@/infra/auth/token.service'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
 
 describe('Reset Password (E2E)', () => {
   let app: INestApplication
@@ -15,8 +16,8 @@ describe('Reset Password (E2E)', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule],
-      providers: [UserFactory],
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
     }).compile()
 
     app = moduleRef.createNestApplication()

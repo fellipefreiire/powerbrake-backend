@@ -96,7 +96,7 @@ export class PrismaUsersRepository implements UsersRepository {
         where: { id: data.id },
         data,
       }),
-      this.cache.delete(`user:${data.id}:details`),
+      this.cache.del(`user:${data.id}:details`),
     ])
   }
 
@@ -107,7 +107,7 @@ export class PrismaUsersRepository implements UsersRepository {
       this.prisma.user.create({
         data,
       }),
-      this.cache.delete('users'),
+      this.cache.del('users'),
     ])
   }
 
@@ -118,8 +118,8 @@ export class PrismaUsersRepository implements UsersRepository {
       this.prisma.user.delete({
         where: { id: data.id },
       }),
-      this.cache.delete(`user:${data.id}:details`),
-      this.cache.delete(`users`),
+      this.cache.del(`user:${data.id}:details`),
+      this.cache.del(`users`),
     ])
   }
 }

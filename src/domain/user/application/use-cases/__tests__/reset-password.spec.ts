@@ -7,13 +7,14 @@ import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-
 import { ResetPasswordUseCase } from '../reset-password'
 import { UserNotFoundError } from '../errors'
 import { UserUnauthorizedError } from '../errors/user-unauthorized-error'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
-import { RedisService } from '@/infra/cache/redis/redis.service'
+import { FakeRefreshTokenService } from 'test/cryptography/fake-refresh-token'
+import { FakeCacheService } from 'test/cache/fake-cache'
 
 let usersRepository: InMemoryUsersRepository
 let tokenVerifier: FakeTokenVerifier
 let hashGenerator: FakeHasher
-let refreshTokenService: RefreshTokenService
+let fakeCacheService: FakeCacheService
+let refreshTokenService: FakeRefreshTokenService
 let sut: ResetPasswordUseCase
 
 const fakeToken = 'valid.token'
@@ -26,15 +27,8 @@ describe('Reset Password', () => {
     usersRepository = new InMemoryUsersRepository()
     tokenVerifier = new FakeTokenVerifier()
     hashGenerator = new FakeHasher()
-
-    const redisMock = {
-      set: vi.fn(),
-      get: vi.fn(),
-      del: vi.fn(),
-      keys: vi.fn().mockResolvedValue([]),
-    } as unknown as RedisService
-
-    refreshTokenService = new RefreshTokenService(redisMock)
+    fakeCacheService = new FakeCacheService()
+    refreshTokenService = new FakeRefreshTokenService(fakeCacheService)
 
     sut = new ResetPasswordUseCase(
       tokenVerifier,
