@@ -9,6 +9,8 @@ import { S3HealthIndicator } from './indicators/s3-health.indicator'
 import { PrismaModule } from '../database/prisma/prisma.module'
 import { CacheModule } from '../cache/cache.module'
 import { StorageModule } from '../storage/storage.module'
+import { MailHealthIndicator } from './indicators/mailer-health.indicator'
+import { MailerModule } from '../mail/mailer.module'
 
 @Module({
   imports: [
@@ -18,8 +20,14 @@ import { StorageModule } from '../storage/storage.module'
     PrismaModule,
     CacheModule,
     StorageModule,
+    MailerModule,
   ],
   controllers: [HealthController],
-  providers: [PrismaHealthIndicator, RedisHealthIndicator, S3HealthIndicator],
+  providers: [
+    PrismaHealthIndicator,
+    RedisHealthIndicator,
+    S3HealthIndicator,
+    MailHealthIndicator,
+  ],
 })
 export class HttpModule {}

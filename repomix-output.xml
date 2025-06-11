@@ -218,6 +218,7 @@ src/
             create-user.controller.e2e-spec.ts
             edit-user-avatar.integration.e2e-spec.ts
             edit-user-controller.e2e-spec.ts
+            edit-user-password.controller.e2e-spec.ts
             edit-user-role.controller.e2e-spec.ts
             edit-user-status.controller.e2e-spec.ts
             find-user-by-id.controller.e2e-spec.ts
@@ -401,118 +402,6 @@ vitest.config.mjs
 
 <files>
 This section contains the contents of the repository's files.
-
-<file path="src/infra/http/controllers/user/edit-user-password.controller.ts">
-import {
-  Body,
-  Controller,
-  HttpCode,
-  Patch,
-  UseFilters,
-  UseGuards,
-} from '@nestjs/common'
-import {
-  ApiBadRequestResponse,
-  ApiBody,
-  ApiInternalServerErrorResponse,
-  ApiNoContentResponse,
-  ApiNotFoundResponse,
-  ApiOperation,
-  ApiTags,
-  ApiUnauthorizedResponse,
-  ApiUnprocessableEntityResponse,
-} from '@nestjs/swagger'
-import { z } from 'zod'
-
-import { ZodValidationPipe } from '../../pipes/zod-validation.pipe'
-import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
-import { CheckPolicies } from '@/infra/auth/casl/check-policies.decorator'
-import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edit-user-password'
-import { UserErrorFilter } from '../../filters/user-error.filter'
-import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
-
-import {
-  BadRequestDto,
-  InternalServerErrorDto,
-  UnprocessableEntityDto,
-} from '../../dtos/error/generic'
-import { WrongCredentialsDto, UserNotFoundDto } from '../../dtos/error/user'
-import { CurrentUser } from '@/infra/auth/current-user.decorator'
-import { EditUserPasswordRequestDto } from '../../dtos/requests/user'
-import type { UserPayload } from '@/infra/auth/jwt.strategy'
-import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-update-self.handler'
-
-const editUserPasswordBodySchema = z.object({
-  currentPassword: z.string().min(6),
-  newPassword: z.string().min(6),
-})
-
-type EditUserPasswordBody = z.infer<typeof editUserPasswordBodySchema>
-
-@UseFilters(UserErrorFilter)
-@ApiTags('Users')
-@ServiceTag('user')
-@Controller({ path: 'users', version: '1' })
-export class EditUserPasswordController {
-  constructor(private editUserPasswordUseCase: EditUserPasswordUseCase) {}
-
-  @Patch(':id/password')
-  @UseGuards(CaslAbilityGuard)
-  @CheckPolicies(userCanUpdateSelfHandler)
-  @HttpCode(204)
-  @ApiOperation({ summary: 'Edit own password' })
-  @ApiBody({ type: EditUserPasswordRequestDto })
-  @ApiNoContentResponse({ description: 'Password updated successfully' })
-  @ApiNotFoundResponse({ type: UserNotFoundDto })
-  @ApiBadRequestResponse({ type: BadRequestDto })
-  @ApiUnauthorizedResponse({ type: WrongCredentialsDto })
-  @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
-  @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
-  async handle(
-    @CurrentUser() user: UserPayload,
-    @Body(new ZodValidationPipe(editUserPasswordBodySchema))
-    body: EditUserPasswordBody,
-  ) {
-    const { currentPassword, newPassword } = body
-
-    const result = await this.editUserPasswordUseCase.execute({
-      userId: user.sub,
-      currentPassword,
-      newPassword,
-      currentJti: user.jti,
-    })
-
-    if (result.isLeft()) {
-      throw result.value
-    }
-  }
-}
-</file>
-
-<file path="src/infra/http/dtos/requests/user/edit-user-password-request.dto.ts">
-import { ApiProperty } from '@nestjs/swagger'
-import { IsString, MinLength } from 'class-validator'
-
-export class EditUserPasswordRequestDto {
-  @ApiProperty({
-    example: 'current-password123',
-    description: 'The current password of the user',
-    minLength: 6,
-  })
-  @IsString()
-  @MinLength(6)
-  currentPassword: string
-
-  @ApiProperty({
-    example: 'new-password456',
-    description: 'The new password to be set',
-    minLength: 6,
-  })
-  @IsString()
-  @MinLength(6)
-  newPassword: string
-}
-</file>
 
 <file path=".husky/pre-push">
 #!/bin/sh
@@ -1296,85 +1185,6 @@ export const right = <L, R>(value: R): Either<L, R> => {
 }
 </file>
 
-<file path="src/domain/user/application/use-cases/__tests__/edit-user-password.spec.ts">
-import { describe, it, expect, beforeEach } from 'vitest'
-import { EditUserPasswordUseCase } from '../edit-user-password'
-import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
-import { makeUser } from 'test/factories/make-user'
-import { FakeHasher } from 'test/cryptography/fake-hasher'
-import { UserNotFoundError } from '../errors'
-import { UserUnauthorizedError } from '../errors/user-unauthorized-error'
-import { FakeRefreshTokenService } from 'test/cryptography/fake-refresh-token'
-import { FakeCacheService } from 'test/cache/fake-cache'
-
-let usersRepository: InMemoryUsersRepository
-let hashComparer: FakeHasher
-let hashGenerator: FakeHasher
-let fakeCacheService: FakeCacheService
-let refreshTokenService: FakeRefreshTokenService
-let sut: EditUserPasswordUseCase
-
-describe('Edit User Password', () => {
-  beforeEach(() => {
-    usersRepository = new InMemoryUsersRepository()
-    hashComparer = new FakeHasher()
-    hashGenerator = new FakeHasher()
-    fakeCacheService = new FakeCacheService()
-    refreshTokenService = new FakeRefreshTokenService(fakeCacheService)
-
-    sut = new EditUserPasswordUseCase(
-      usersRepository,
-      hashComparer,
-      hashGenerator,
-      refreshTokenService,
-    )
-  })
-
-  it('should edit password when current password is valid', async () => {
-    const user = makeUser({
-      passwordHash: await hashGenerator.hash('correct-password'),
-    })
-    await usersRepository.create(user)
-
-    const result = await sut.execute({
-      userId: user.id.toString(),
-      currentPassword: 'correct-password',
-      newPassword: 'new-password',
-    })
-
-    expect(result.isRight()).toBe(true)
-    expect(user.passwordHash).toBe('new-password-hashed')
-  })
-
-  it('should return UserNotFoundError if user does not exist', async () => {
-    const result = await sut.execute({
-      userId: 'non-existent-id',
-      currentPassword: 'any-password',
-      newPassword: 'new-password',
-    })
-
-    expect(result.isLeft()).toBe(true)
-    expect(result.value).toBeInstanceOf(UserNotFoundError)
-  })
-
-  it('should return UserUnauthorizedError if current password is invalid', async () => {
-    const user = makeUser({ passwordHash: 'correct-hash' })
-    await usersRepository.create(user)
-
-    hashComparer.compare = vi.fn().mockResolvedValue(false)
-
-    const result = await sut.execute({
-      userId: user.id.toString(),
-      currentPassword: 'wrong-password',
-      newPassword: 'new-password',
-    })
-
-    expect(result.isLeft()).toBe(true)
-    expect(result.value).toBeInstanceOf(UserUnauthorizedError)
-  })
-})
-</file>
-
 <file path="src/domain/user/application/use-cases/__tests__/edit-user-role.spec.ts">
 import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
 import { EditUserRoleUseCase } from '../edit-user-role'
@@ -1569,70 +1379,6 @@ import { BaseError } from '@/core/errors/use-case-error'
 export class WrongCredentialsError extends BaseError {
   constructor(message = 'Credentials are not valid.') {
     super(message, 'WrongCredentialsError')
-  }
-}
-</file>
-
-<file path="src/domain/user/application/use-cases/edit-user-password.ts">
-import { Either, left, right } from '@/core/either'
-import { UserNotFoundError } from './errors'
-import { UserUnauthorizedError } from './errors/user-unauthorized-error'
-import { UsersRepository } from '../repositories/user-repository'
-import { HashComparer } from '@/shared/cryptography/hash-comparer'
-import { HashGenerator } from '@/shared/cryptography/hash-generator'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
-import { Injectable } from '@nestjs/common'
-
-interface EditUserPasswordUseCaseRequest {
-  userId: string
-  currentPassword: string
-  newPassword: string
-  currentJti: string
-}
-
-type EditUserPasswordUseCaseResponse = Either<
-  UserNotFoundError | UserUnauthorizedError,
-  void
->
-
-@Injectable()
-export class EditUserPasswordUseCase {
-  constructor(
-    private usersRepository: UsersRepository,
-    private hashComparer: HashComparer,
-    private hashGenerator: HashGenerator,
-    private refreshTokenRepository: RefreshTokenRepository,
-  ) {}
-
-  async execute({
-    userId,
-    currentPassword,
-    newPassword,
-    currentJti,
-  }: EditUserPasswordUseCaseRequest): Promise<EditUserPasswordUseCaseResponse> {
-    const user = await this.usersRepository.findById(userId)
-
-    if (!user) {
-      return left(new UserNotFoundError())
-    }
-
-    const isPasswordValid = await this.hashComparer.compare(
-      currentPassword,
-      user.passwordHash,
-    )
-
-    if (!isPasswordValid) {
-      return left(new UserUnauthorizedError())
-    }
-
-    const newPasswordHash = await this.hashGenerator.hash(newPassword)
-    user.updatePassword(newPasswordHash)
-
-    await this.usersRepository.save(user)
-
-    await this.refreshTokenRepository.revokeAllForUserExcept(userId, currentJti)
-
-    return right(undefined)
   }
 }
 </file>
@@ -1992,28 +1738,6 @@ export const IS_PUBLIC_KEY = 'isPublic'
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true)
 </file>
 
-<file path="src/infra/auth/token-repository.ts">
-export abstract class TokenRepository {
-  abstract generateAccessToken(payload: {
-    sub: string
-    role: string
-    jti: string
-  }): Promise<{
-    token: string
-    expiresIn: number
-  }>
-
-  abstract generateRefreshToken(payload: {
-    sub: string
-    role: string
-    jti: string
-  }): Promise<{
-    token: string
-    expiresIn: number
-  }>
-}
-</file>
-
 <file path="src/infra/cache/redis/redis.service.ts">
 import { EnvService } from '@/infra/env/env.service'
 import { Injectable } from '@nestjs/common'
@@ -2224,6 +1948,91 @@ export class EnvService {
 }
 </file>
 
+<file path="src/infra/http/controllers/user/__tests__/edit-user-password.controller.e2e-spec.ts">
+import request from 'supertest'
+import { INestApplication, VersioningType } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { AppModule } from '@/infra/app.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { UserFactory } from 'test/factories/make-user'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { TokenService } from '@/infra/auth/token.service'
+import { CacheRepository } from '@/infra/cache/cache-repository'
+import { randomUUID } from 'crypto'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { hash } from 'bcryptjs'
+
+describe('Edit User Password (E2E)', () => {
+  let app: INestApplication
+  let prisma: PrismaService
+  let userFactory: UserFactory
+  let tokenService: TokenService
+  let cache: CacheRepository
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
+    }).compile()
+
+    app = moduleRef.createNestApplication()
+    app.enableVersioning({ type: VersioningType.URI })
+    await app.init()
+
+    prisma = moduleRef.get(PrismaService)
+    userFactory = moduleRef.get(UserFactory)
+    tokenService = moduleRef.get(TokenService)
+    cache = moduleRef.get(CacheRepository)
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+
+    const keys = await cache.keys('refresh_token:*')
+    if (keys.length > 0) await cache.del(keys)
+  })
+
+  it('[204] Success → should update password and revoke other sessions', async () => {
+    const password = '123456'
+    const user = await userFactory.makePrismaUser({
+      passwordHash: await hash(password, 8),
+    })
+
+    const jti1 = randomUUID()
+    const jti2 = randomUUID()
+
+    const token2 = await tokenService.generate({
+      sub: user.id.toString(),
+      role: user.role,
+      jti: jti2,
+    })
+
+    await cache.set(`refresh_token:${jti1}`, user.id.toString())
+    await cache.set(`refresh_token:${jti2}`, user.id.toString())
+
+    await request(app.getHttpServer())
+      .patch(`/v1/users/${user.id.toString()}/password`)
+      .set('Authorization', `Bearer ${token2}`)
+      .send({
+        currentPassword: password,
+        newPassword: 'new-password',
+      })
+      .expect(204)
+
+    const keys = await cache.keys('refresh_token:*')
+
+    expect(keys).toContain(`refresh_token:${jti2}`)
+    expect(keys).not.toContain(`refresh_token:${jti1}`)
+  })
+})
+</file>
+
 <file path="src/infra/http/controllers/user/__tests__/forgot-password.controller.e2e-spec.ts">
 import { INestApplication, VersioningType } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -2320,6 +2129,93 @@ describe('Forgot Password (E2E)', () => {
     )
   })
 })
+</file>
+
+<file path="src/infra/http/controllers/user/edit-user-password.controller.ts">
+import {
+  Body,
+  Controller,
+  HttpCode,
+  Patch,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common'
+import {
+  ApiBadRequestResponse,
+  ApiBody,
+  ApiInternalServerErrorResponse,
+  ApiNoContentResponse,
+  ApiNotFoundResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+  ApiUnprocessableEntityResponse,
+} from '@nestjs/swagger'
+import { z } from 'zod'
+
+import { ZodValidationPipe } from '../../pipes/zod-validation.pipe'
+import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
+import { CheckPolicies } from '@/infra/auth/casl/check-policies.decorator'
+import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edit-user-password'
+import { UserErrorFilter } from '../../filters/user-error.filter'
+import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
+
+import {
+  BadRequestDto,
+  InternalServerErrorDto,
+  UnprocessableEntityDto,
+} from '../../dtos/error/generic'
+import { WrongCredentialsDto, UserNotFoundDto } from '../../dtos/error/user'
+import { CurrentUser } from '@/infra/auth/current-user.decorator'
+import { EditUserPasswordRequestDto } from '../../dtos/requests/user'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
+import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-update-self.handler'
+
+const editUserPasswordBodySchema = z.object({
+  currentPassword: z.string().min(6),
+  newPassword: z.string().min(6),
+})
+
+type EditUserPasswordBody = z.infer<typeof editUserPasswordBodySchema>
+
+@UseFilters(UserErrorFilter)
+@ApiTags('Users')
+@ServiceTag('user')
+@Controller({ path: 'users', version: '1' })
+export class EditUserPasswordController {
+  constructor(private editUserPasswordUseCase: EditUserPasswordUseCase) {}
+
+  @Patch(':id/password')
+  @UseGuards(CaslAbilityGuard)
+  @CheckPolicies(userCanUpdateSelfHandler)
+  @HttpCode(204)
+  @ApiOperation({ summary: 'Edit own password' })
+  @ApiBody({ type: EditUserPasswordRequestDto })
+  @ApiNoContentResponse({ description: 'Password updated successfully' })
+  @ApiNotFoundResponse({ type: UserNotFoundDto })
+  @ApiBadRequestResponse({ type: BadRequestDto })
+  @ApiUnauthorizedResponse({ type: WrongCredentialsDto })
+  @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
+  @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
+  async handle(
+    @CurrentUser() user: UserPayload,
+    @Body(new ZodValidationPipe(editUserPasswordBodySchema))
+    body: EditUserPasswordBody,
+  ) {
+    const { currentPassword, newPassword } = body
+
+    const result = await this.editUserPasswordUseCase.execute({
+      userId: user.sub,
+      currentPassword,
+      newPassword,
+      currentJti: user.jti,
+    })
+
+    if (result.isLeft()) {
+      throw result.value
+    }
+  }
+}
 </file>
 
 <file path="src/infra/http/controllers/user/forgot-password.controller.ts">
@@ -2889,6 +2785,31 @@ export class CreateUserRequestDto {
 
   @ApiProperty({ enum: Role, example: Role.ADMIN })
   role!: Role
+}
+</file>
+
+<file path="src/infra/http/dtos/requests/user/edit-user-password-request.dto.ts">
+import { ApiProperty } from '@nestjs/swagger'
+import { IsString, MinLength } from 'class-validator'
+
+export class EditUserPasswordRequestDto {
+  @ApiProperty({
+    example: 'current-password123',
+    description: 'The current password of the user',
+    minLength: 6,
+  })
+  @IsString()
+  @MinLength(6)
+  currentPassword: string
+
+  @ApiProperty({
+    example: 'new-password456',
+    description: 'The new password to be set',
+    minLength: 6,
+  })
+  @IsString()
+  @MinLength(6)
+  newPassword: string
 }
 </file>
 
@@ -3700,55 +3621,6 @@ export abstract class Uploader {
 }
 </file>
 
-<file path="test/cache/fake-cache.ts">
-import type { CacheRepository } from '@/infra/cache/cache-repository'
-
-export class FakeCacheService implements CacheRepository {
-  private store = new Map<string, { value: string; expiresAt?: number }>()
-
-  async set(key: string, value: string, ttlInSeconds?: number): Promise<void> {
-    const expiresAt = ttlInSeconds
-      ? Date.now() + ttlInSeconds * 1000
-      : undefined
-    this.store.set(key, { value, expiresAt })
-  }
-
-  async get(key: string): Promise<string | null> {
-    const record = this.store.get(key)
-    if (!record) return null
-
-    if (record.expiresAt && Date.now() > record.expiresAt) {
-      this.store.delete(key)
-      return null
-    }
-
-    return record.value
-  }
-
-  async del(key: string | string[]): Promise<number> {
-    const keys = Array.isArray(key) ? key : [key]
-    let count = 0
-
-    for (const k of keys) {
-      if (this.store.delete(k)) count++
-    }
-
-    return count
-  }
-
-  async keys(pattern: string): Promise<string[]> {
-    const regex = new RegExp(
-      '^' +
-        pattern
-          .replace(/\*/g, '.*')
-          .replace(/[-[\]{}()+?.,\\^$|#\s]/g, '\\$&') +
-        '$',
-    )
-    return Array.from(this.store.keys()).filter((key) => regex.test(key))
-  }
-}
-</file>
-
 <file path="test/cryptography/fake-hasher.ts">
 import type { HashComparer } from '@/shared/cryptography/hash-comparer'
 import type { HashGenerator } from '@/shared/cryptography/hash-generator'
@@ -3760,76 +3632,6 @@ export class FakeHasher implements HashGenerator, HashComparer {
 
   async compare(plain: string, hash: string): Promise<boolean> {
     return plain.concat('-hashed') === hash
-  }
-}
-</file>
-
-<file path="test/cryptography/fake-refresh-token.ts">
-import { randomUUID } from 'crypto'
-import { CacheRepository } from '@/infra/cache/cache-repository'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
-
-export class FakeRefreshTokenService implements RefreshTokenRepository {
-  constructor(private readonly cache: CacheRepository) {}
-
-  async create(userId: string): Promise<string> {
-    const jti = randomUUID()
-    await this.cache.set(this.key(jti), userId, 60 * 60 * 24 * 7) // 7 days
-    return jti
-  }
-
-  async validate(jti: string): Promise<boolean> {
-    const userId = await this.cache.get(this.key(jti))
-    return !!userId
-  }
-
-  async revoke(jti: string): Promise<void> {
-    await this.cache.del(this.key(jti))
-  }
-
-  async revokeAllForUser(userId: string): Promise<void> {
-    const keys = await this.cache.keys('refresh_token:*')
-
-    const deletable: string[] = []
-    for (const key of keys) {
-      const uid = await this.cache.get(key)
-      if (uid === userId) {
-        deletable.push(key)
-      }
-    }
-
-    if (deletable.length > 0) {
-      await this.cache.del(deletable)
-    }
-  }
-
-  private key(jti: string): string {
-    return `refresh_token:${jti}`
-  }
-
-  // método auxiliar exclusivo para testes
-  async isRevoked(jti: string): Promise<boolean> {
-    const result = await this.cache.get(this.key(jti))
-    return result === null
-  }
-
-  async revokeAllForUserExcept(
-    userId: string,
-    exceptJti: string,
-  ): Promise<void> {
-    const keys = await this.cache.keys('refresh_token:*')
-
-    const deletable: string[] = []
-    for (const key of keys) {
-      const uid = await this.cache.get(key)
-      if (uid === userId && key !== this.key(exceptJti)) {
-        deletable.push(key)
-      }
-    }
-
-    if (deletable.length > 0) {
-      await this.cache.del(deletable)
-    }
   }
 }
 </file>
@@ -4725,6 +4527,122 @@ describe('Create User', () => {
 })
 </file>
 
+<file path="src/domain/user/application/use-cases/__tests__/edit-user-password.spec.ts">
+import { describe, it, expect, beforeEach } from 'vitest'
+import { EditUserPasswordUseCase } from '../edit-user-password'
+import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
+import { makeUser } from 'test/factories/make-user'
+import { FakeHasher } from 'test/cryptography/fake-hasher'
+import { UserNotFoundError } from '../errors'
+import { UserUnauthorizedError } from '../errors/user-unauthorized-error'
+import { FakeRefreshTokenService } from 'test/cryptography/fake-refresh-token'
+import { FakeCacheService } from 'test/cache/fake-cache'
+
+let usersRepository: InMemoryUsersRepository
+let hashComparer: FakeHasher
+let hashGenerator: FakeHasher
+let fakeCacheService: FakeCacheService
+let refreshTokenService: FakeRefreshTokenService
+let sut: EditUserPasswordUseCase
+
+describe('Edit User Password', () => {
+  beforeEach(() => {
+    usersRepository = new InMemoryUsersRepository()
+    hashComparer = new FakeHasher()
+    hashGenerator = new FakeHasher()
+    fakeCacheService = new FakeCacheService()
+    refreshTokenService = new FakeRefreshTokenService(fakeCacheService)
+
+    sut = new EditUserPasswordUseCase(
+      usersRepository,
+      hashComparer,
+      hashGenerator,
+      refreshTokenService,
+    )
+  })
+
+  it('should update the password and revoke other sessions', async () => {
+    const user = makeUser({
+      passwordHash: await hashGenerator.hash('old-pass'),
+    })
+    await usersRepository.create(user)
+
+    const result = await sut.execute({
+      userId: user.id.toString(),
+      currentPassword: 'old-pass',
+      newPassword: 'new-pass',
+      currentJti: 'current-jti',
+    })
+
+    expect(result.isRight()).toBe(true)
+
+    const updated = await usersRepository.findById(user.id.toString())
+    const passwordMatch = await hashComparer.compare(
+      'new-pass',
+      updated!.passwordHash,
+    )
+
+    expect(passwordMatch).toBe(true)
+  })
+
+  it('should return UserNotFoundError if user does not exist', async () => {
+    const result = await sut.execute({
+      userId: 'non-existent-id',
+      currentPassword: 'any-password',
+      newPassword: 'new-password',
+      currentJti: 'current-jti',
+    })
+
+    expect(result.isLeft()).toBe(true)
+    expect(result.value).toBeInstanceOf(UserNotFoundError)
+  })
+
+  it('should return UserUnauthorizedError if current password is invalid', async () => {
+    const user = makeUser({
+      passwordHash: await hashGenerator.hash('correct-password'),
+    })
+    await usersRepository.create(user)
+
+    hashComparer.compare = vi.fn().mockResolvedValue(false)
+
+    const result = await sut.execute({
+      userId: user.id.toString(),
+      currentPassword: 'wrong-password',
+      newPassword: 'new-password',
+      currentJti: 'current-jti',
+    })
+
+    expect(result.isLeft()).toBe(true)
+    expect(result.value).toBeInstanceOf(UserUnauthorizedError)
+  })
+
+  it('should revoke all other sessions except current', async () => {
+    const user = makeUser({
+      passwordHash: await hashGenerator.hash('old-pass'),
+    })
+    await usersRepository.create(user)
+
+    await fakeCacheService.set('refresh_token:abc', user.id.toString())
+    await fakeCacheService.set('refresh_token:def', user.id.toString())
+    await fakeCacheService.set('refresh_token:ghi', 'another-user-id')
+
+    const result = await sut.execute({
+      userId: user.id.toString(),
+      currentPassword: 'old-pass',
+      newPassword: 'new-pass',
+      currentJti: 'def',
+    })
+
+    expect(result.isRight()).toBe(true)
+
+    const remainingKeys = await fakeCacheService.keys('refresh_token:*')
+    expect(remainingKeys).toContain('refresh_token:def')
+    expect(remainingKeys).not.toContain('refresh_token:abc')
+    expect(remainingKeys).toContain('refresh_token:ghi')
+  })
+})
+</file>
+
 <file path="src/domain/user/application/use-cases/__tests__/find-user-by-email.spec.ts">
 import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
 import { makeUser } from 'test/factories/make-user'
@@ -4980,6 +4898,70 @@ describe('User Avatar Watcher', () => {
     expect(watcher.getUpdatedId()).toEqual(newId)
   })
 })
+</file>
+
+<file path="src/domain/user/application/use-cases/edit-user-password.ts">
+import { Either, left, right } from '@/core/either'
+import { UserNotFoundError } from './errors'
+import { UserUnauthorizedError } from './errors/user-unauthorized-error'
+import { UsersRepository } from '../repositories/user-repository'
+import { HashComparer } from '@/shared/cryptography/hash-comparer'
+import { HashGenerator } from '@/shared/cryptography/hash-generator'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { Injectable } from '@nestjs/common'
+
+interface EditUserPasswordUseCaseRequest {
+  userId: string
+  currentPassword: string
+  newPassword: string
+  currentJti: string
+}
+
+type EditUserPasswordUseCaseResponse = Either<
+  UserNotFoundError | UserUnauthorizedError,
+  void
+>
+
+@Injectable()
+export class EditUserPasswordUseCase {
+  constructor(
+    private usersRepository: UsersRepository,
+    private hashComparer: HashComparer,
+    private hashGenerator: HashGenerator,
+    private refreshTokenRepository: RefreshTokenRepository,
+  ) {}
+
+  async execute({
+    userId,
+    currentPassword,
+    newPassword,
+    currentJti,
+  }: EditUserPasswordUseCaseRequest): Promise<EditUserPasswordUseCaseResponse> {
+    const user = await this.usersRepository.findById(userId)
+
+    if (!user) {
+      return left(new UserNotFoundError())
+    }
+
+    const isPasswordValid = await this.hashComparer.compare(
+      currentPassword,
+      user.passwordHash,
+    )
+
+    if (!isPasswordValid) {
+      return left(new UserUnauthorizedError())
+    }
+
+    const newPasswordHash = await this.hashGenerator.hash(newPassword)
+    user.updatePassword(newPasswordHash)
+
+    await this.usersRepository.save(user)
+
+    await this.refreshTokenRepository.revokeAllForUserExcept(userId, currentJti)
+
+    return right(undefined)
+  }
+}
 </file>
 
 <file path="src/domain/user/application/use-cases/forgot-password.ts">
@@ -5297,88 +5279,25 @@ export const CheckPolicies = (...handlers: PolicyHandler[]) =>
   SetMetadata(CHECK_POLICIES_KEY, handlers)
 </file>
 
-<file path="src/infra/auth/refresh-token.repository.ts">
-export abstract class RefreshTokenRepository {
-  abstract create(userId: string): Promise<string>
-  abstract validate(jti: string): Promise<boolean>
-  abstract revoke(jti: string): Promise<void>
-  abstract revokeAllForUser(userId: string): Promise<void>
-  abstract revokeAllForUserExcept(
-    userId: string,
-    exceptJti: string,
-  ): Promise<void>
-}
-</file>
+<file path="src/infra/auth/token-repository.ts">
+export abstract class TokenRepository {
+  abstract generateAccessToken(payload: {
+    sub: string
+    role: string
+    jti: string
+  }): Promise<{
+    token: string
+    expiresIn: number
+  }>
 
-<file path="src/infra/auth/refresh-token.service.ts">
-import { Injectable } from '@nestjs/common'
-import { randomUUID } from 'crypto'
-import { CacheRepository } from '../cache/cache-repository'
-import { RefreshTokenRepository } from './refresh-token.repository'
-
-@Injectable()
-export class RefreshTokenService implements RefreshTokenRepository {
-  constructor(private cache: CacheRepository) {}
-
-  async create(userId: string): Promise<string> {
-    const jti = randomUUID()
-
-    await this.cache.set(this.key(jti), userId, 60 * 60 * 24 * 7) // 7 days
-
-    return jti
-  }
-
-  async validate(jti: string): Promise<boolean> {
-    const exists = await this.cache.get(this.key(jti))
-    return !!exists
-  }
-
-  async revoke(jti: string): Promise<void> {
-    await this.cache.del(this.key(jti))
-  }
-
-  async revokeAllForUser(userId: string): Promise<void> {
-    const keys = await this.cache.keys(`refresh_token:*`)
-    const tokens = await Promise.all(
-      keys.map(async (key) => {
-        const uid = await this.cache.get(key)
-        return { key, uid }
-      }),
-    )
-    const keysToDelete = tokens
-      .filter((t) => t.uid === userId)
-      .map((t) => t.key)
-
-    if (keysToDelete.length > 0) {
-      await this.cache.del(keysToDelete)
-    }
-  }
-
-  private key(jti: string): string {
-    return `refresh_token:${jti}`
-  }
-
-  async revokeAllForUserExcept(
-    userId: string,
-    exceptJti: string,
-  ): Promise<void> {
-    const keys = await this.cache.keys('refresh_token:*')
-
-    const tokens = await Promise.all(
-      keys.map(async (key) => {
-        const uid = await this.cache.get(key)
-        return { key, uid }
-      }),
-    )
-
-    const keysToDelete = tokens
-      .filter((t) => t.uid === userId && t.key !== this.key(exceptJti))
-      .map((t) => t.key)
-
-    if (keysToDelete.length > 0) {
-      await this.cache.del(keysToDelete)
-    }
-  }
+  abstract generateRefreshToken(payload: {
+    sub: string
+    role: string
+    jti: string
+  }): Promise<{
+    token: string
+    expiresIn: number
+  }>
 }
 </file>
 
@@ -5803,100 +5722,6 @@ export const envSchema = z.object({
 export type Env = z.infer<typeof envSchema>
 </file>
 
-<file path="src/infra/http/controllers/user/__tests__/edit-user-avatar.integration.e2e-spec.ts">
-import request from 'supertest'
-import { INestApplication, VersioningType } from '@nestjs/common'
-import { Test } from '@nestjs/testing'
-import { AppModule } from '@/infra/app.module'
-import { PrismaService } from '@/infra/database/prisma/prisma.service'
-import { UserFactory } from 'test/factories/make-user'
-import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
-import { TokenService } from '@/infra/auth/token.service'
-import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
-
-describe('Edit User Avatar (E2E)', () => {
-  let app: INestApplication
-  let prisma: PrismaService
-  let userFactory: UserFactory
-  let token: TokenService
-
-  beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule, CryptographyModule],
-      providers: [UserFactory, TokenService],
-    }).compile()
-
-    app = moduleRef.createNestApplication()
-    app.enableVersioning({
-      type: VersioningType.URI,
-    })
-
-    prisma = moduleRef.get(PrismaService)
-    userFactory = moduleRef.get(UserFactory)
-    token = moduleRef.get(TokenService)
-
-    await app.init()
-  })
-
-  afterAll(async () => {
-    await prisma.$disconnect()
-    await app.close()
-  })
-
-  it('[INTEGRATION] → should upload an avatar and assign it to the user', async () => {
-    const user = await userFactory.makePrismaUser({
-      name: 'Test User',
-      email: 'test@example.com',
-      role: 'OPERATOR',
-    })
-
-    const accessToken = await token.generateAccessToken({
-      sub: user.id.toString(),
-      role: user.role,
-    })
-
-    const avatarUploadRes = await request(app.getHttpServer())
-      .post('/v1/avatar')
-      .set('Authorization', `Bearer ${accessToken.token}`)
-      .attach('file', './test/e2e/sample-upload.png')
-
-    const avatarId = avatarUploadRes.body.data
-
-    const payload = {
-      name: 'Updated User',
-      avatarId,
-      addresses: [
-        {
-          street: 'New Street',
-          number: '202',
-          neighborhood: 'New Neighborhood',
-          city: 'New City',
-          state: 'New State',
-          zipCode: '11111-111',
-        },
-      ],
-    }
-
-    await request(app.getHttpServer())
-      .patch(`/v1/users/${user.id}`)
-      .set('Authorization', `Bearer ${accessToken.token}`)
-      .send(payload)
-      .expect(200)
-
-    const userOnDatabase = await prisma.user.findUnique({
-      where: { id: user.id.toString() },
-    })
-
-    const avatarOnDatabase = await prisma.avatar.findUnique({
-      where: { id: avatarId },
-    })
-
-    expect(userOnDatabase?.avatarId).toBe(avatarId)
-    expect(avatarOnDatabase?.userId).toBe(user.id.toString())
-  })
-})
-</file>
-
 <file path="src/infra/http/controllers/user/__tests__/reset-password.controller.e2e-spec.ts">
 import { INestApplication, VersioningType } from '@nestjs/common'
 import { Test } from '@nestjs/testing'
@@ -6026,59 +5851,6 @@ describe('Reset Password (E2E)', () => {
 })
 </file>
 
-<file path="src/infra/http/controllers/user/logout-user.controller.ts">
-import {
-  Controller,
-  HttpCode,
-  Post,
-  UseGuards,
-  UseFilters,
-} from '@nestjs/common'
-import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-user'
-import { CurrentUser } from '@/infra/auth/current-user.decorator'
-import { JwtAuthGuard } from '@/infra/auth/jwt-auth.guard'
-import { UserErrorFilter } from '../../filters/user-error.filter'
-import {
-  ApiInternalServerErrorResponse,
-  ApiNoContentResponse,
-  ApiOperation,
-  ApiTags,
-  ApiUnauthorizedResponse,
-} from '@nestjs/swagger'
-import { InternalServerErrorDto } from '../../dtos/error/generic'
-import { UserUnauthorizedDto } from '../../dtos/error/user'
-import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
-import type { UserPayload } from '@/infra/auth/jwt.strategy'
-
-@UseFilters(UserErrorFilter)
-@ApiTags('Users')
-@ServiceTag('user')
-@Controller({ path: 'users', version: '1' })
-export class LogoutUserController {
-  constructor(private logoutUserUseCase: LogoutUserUseCase) {}
-
-  @Post('logout')
-  @UseGuards(JwtAuthGuard)
-  @HttpCode(204)
-  @UseGuards(JwtAuthGuard)
-  @ApiOperation({ summary: 'Logout user by invalidating refresh token' })
-  @ApiNoContentResponse({ description: 'User logged out successfully' })
-  @ApiUnauthorizedResponse({
-    description: 'User is not authenticated',
-    type: UserUnauthorizedDto,
-  })
-  @ApiInternalServerErrorResponse({
-    description: 'Unexpected error',
-    type: InternalServerErrorDto,
-  })
-  async handle(@CurrentUser() user: UserPayload) {
-    const result = await this.logoutUserUseCase.execute({ jti: user.jti })
-
-    if (result.isLeft()) throw result.value
-  }
-}
-</file>
-
 <file path="src/infra/http/controllers/health.controller.ts">
 import { Public } from '@/infra/auth/public'
 import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
@@ -6155,16 +5927,6 @@ export class UserInactiveDto extends ForbiddenDto {
   @ApiProperty({ example: 'User inactive' })
   declare message: string
 }
-</file>
-
-<file path="src/infra/http/dtos/requests/user/index.ts">
-export * from './authenticate-request.dto'
-export * from './create-user-request.dto'
-export * from './edit-user-request.dto'
-export * from './edit-user-role-request.dto'
-export * from './reset-password-request.dto'
-export * from './forgot-password-request.dto'
-export * from './edit-user-password-request.dto'
 </file>
 
 <file path="src/infra/http/filters/app-error.filter.ts">
@@ -6547,6 +6309,52 @@ export abstract class Encrypter {
 }
 </file>
 
+<file path="test/cache/fake-cache.ts">
+import type { CacheRepository } from '@/infra/cache/cache-repository'
+
+export class FakeCacheService implements CacheRepository {
+  private store = new Map<string, { value: string; expiresAt?: number }>()
+
+  async set(key: string, value: string, ttlInSeconds?: number): Promise<void> {
+    const expiresAt = ttlInSeconds
+      ? Date.now() + ttlInSeconds * 1000
+      : undefined
+    this.store.set(key, { value, expiresAt })
+  }
+
+  async get(key: string): Promise<string | null> {
+    const record = this.store.get(key)
+    if (!record) return null
+
+    if (record.expiresAt && Date.now() > record.expiresAt) {
+      this.store.delete(key)
+      return null
+    }
+
+    return record.value
+  }
+
+  async del(key: string | string[]): Promise<number> {
+    const keys = Array.isArray(key) ? key : [key]
+    let count = 0
+
+    for (const k of keys) {
+      if (this.store.delete(k)) count++
+    }
+
+    return count
+  }
+
+  async keys(pattern: string): Promise<string[]> {
+    // Escape antes e depois substitui * por .*
+    const escaped = pattern.replace(/[-[\]{}()+?.,\\^$|#\s]/g, '\\$&')
+    const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$')
+
+    return Array.from(this.store.keys()).filter((key) => regex.test(key))
+  }
+}
+</file>
+
 <file path="test/cryptography/fake-encrypter.ts">
 import type { Encrypter } from '@/shared/cryptography/encrypter'
 
@@ -6557,6 +6365,75 @@ export class FakeEncrypter implements Encrypter {
   async encrypt(payload: Record<string, unknown>): Promise<string> {
     this.payload = payload
     return this.result
+  }
+}
+</file>
+
+<file path="test/cryptography/fake-refresh-token.ts">
+import { randomUUID } from 'crypto'
+import { CacheRepository } from '@/infra/cache/cache-repository'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+
+export class FakeRefreshTokenService implements RefreshTokenRepository {
+  constructor(private readonly cache: CacheRepository) {}
+
+  async create(userId: string): Promise<string> {
+    const jti = randomUUID()
+    await this.cache.set(this.key(jti), userId, 60 * 60 * 24 * 7) // 7 days
+    return jti
+  }
+
+  async validate(jti: string): Promise<boolean> {
+    const userId = await this.cache.get(this.key(jti))
+    return !!userId
+  }
+
+  async revoke(jti: string): Promise<void> {
+    await this.cache.del(this.key(jti))
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    const keys = await this.cache.keys('refresh_token:*')
+
+    const deletable: string[] = []
+    for (const key of keys) {
+      const uid = await this.cache.get(key)
+      if (uid === userId) {
+        deletable.push(key)
+      }
+    }
+
+    if (deletable.length > 0) {
+      await this.cache.del(deletable)
+    }
+  }
+
+  private key(jti: string): string {
+    return `refresh_token:${jti}`
+  }
+
+  async isRevoked(jti: string): Promise<boolean> {
+    const result = await this.cache.get(this.key(jti))
+    return result === null
+  }
+
+  async revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void> {
+    const keys = await this.cache.keys('refresh_token:*')
+
+    const deletable: string[] = []
+    for (const key of keys) {
+      const uid = await this.cache.get(key)
+      if (uid === userId && key !== this.key(exceptJti)) {
+        deletable.push(key)
+      }
+    }
+
+    if (deletable.length > 0) {
+      await this.cache.del(deletable)
+    }
   }
 }
 </file>
@@ -7052,83 +6929,6 @@ export class LogoutUserUseCase {
 }
 </file>
 
-<file path="src/domain/user/application/use-cases/refresh-user-token.ts">
-import { left, right, type Either } from '@/core/either'
-import { Injectable } from '@nestjs/common'
-import { JwtService } from '@nestjs/jwt'
-import { UserUnauthorizedError } from './errors/user-unauthorized-error'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
-import { TokenRepository } from '@/infra/auth/token-repository'
-import type { UserPayload } from '@/infra/auth/jwt.strategy'
-
-type RefreshUserTokenUseCaseRequest = {
-  refreshToken: string
-}
-
-type RefreshUserTokenUseCaseResponse = Either<
-  UserUnauthorizedError,
-  {
-    accessToken: {
-      token: string
-      expiresIn: number
-    }
-    refreshToken: {
-      token: string
-      expiresIn: number
-    }
-    expiresIn: number
-  }
->
-
-@Injectable()
-export class RefreshUserTokenUseCase {
-  constructor(
-    private jwtService: JwtService,
-    private tokenRepository: TokenRepository,
-    private refreshTokenRepository: RefreshTokenRepository,
-  ) {}
-
-  async execute({
-    refreshToken,
-  }: RefreshUserTokenUseCaseRequest): Promise<RefreshUserTokenUseCaseResponse> {
-    if (!refreshToken) {
-      return left(new UserUnauthorizedError())
-    }
-
-    let payload: UserPayload
-
-    try {
-      payload = this.jwtService.verify(refreshToken)
-    } catch {
-      return left(new UserUnauthorizedError())
-    }
-
-    const isValid = await this.refreshTokenRepository.validate(payload.jti)
-
-    if (!isValid) {
-      return left(new UserUnauthorizedError())
-    }
-
-    const jti = await this.refreshTokenRepository.create(payload.sub)
-
-    const accessToken = await this.tokenRepository.generateAccessToken({
-      sub: payload.sub,
-      role: payload.role,
-      jti,
-    })
-
-    return right({
-      accessToken,
-      refreshToken: {
-        token: refreshToken,
-        expiresIn: payload.exp,
-      },
-      expiresIn: accessToken.expiresIn,
-    })
-  }
-}
-</file>
-
 <file path="src/domain/user/application/use-cases/reset-password.ts">
 import { Injectable } from '@nestjs/common'
 import { UsersRepository } from '../repositories/user-repository'
@@ -7356,47 +7156,87 @@ export const permissions: Record<Role, PermissionsByRole> = {
 }
 </file>
 
-<file path="src/infra/auth/token.service.ts">
+<file path="src/infra/auth/refresh-token.repository.ts">
+export abstract class RefreshTokenRepository {
+  abstract create(userId: string): Promise<string>
+  abstract validate(jti: string): Promise<boolean>
+  abstract revoke(jti: string): Promise<void>
+  abstract revokeAllForUser(userId: string): Promise<void>
+  abstract revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void>
+}
+</file>
+
+<file path="src/infra/auth/refresh-token.service.ts">
 import { Injectable } from '@nestjs/common'
-import { Encrypter } from '@/shared/cryptography/encrypter'
-import { TokenRepository } from './token-repository'
+import { randomUUID } from 'crypto'
+import { CacheRepository } from '../cache/cache-repository'
+import { RefreshTokenRepository } from './refresh-token.repository'
 
 @Injectable()
-export class TokenService implements TokenRepository {
-  constructor(private encrypter: Encrypter) {}
+export class RefreshTokenService implements RefreshTokenRepository {
+  constructor(private cache: CacheRepository) {}
 
-  async generateAccessToken(payload: { sub: string; role: string }) {
-    const now = Math.floor(Date.now() / 1000)
-    const exp = now + 60 * 60 // 1 hour
+  async create(userId: string): Promise<string> {
+    const jti = randomUUID()
 
-    const token = await this.encrypter.encrypt({
-      ...payload,
-      iat: now,
-      exp,
-    })
+    await this.cache.set(this.key(jti), userId, 60 * 60 * 24 * 7) // 7 days
 
-    return { token, expiresIn: exp }
+    return jti
   }
 
-  async generateRefreshToken(payload: {
-    sub: string
-    role: string
-    jti: string
-  }) {
-    const now = Math.floor(Date.now() / 1000)
-    const exp = now + 60 * 60 * 24 * 7 // 7 days
-
-    const token = await this.encrypter.encrypt({
-      ...payload,
-      iat: now,
-      exp,
-    })
-
-    return { token, expiresIn: exp }
+  async validate(jti: string): Promise<boolean> {
+    const exists = await this.cache.get(this.key(jti))
+    return !!exists
   }
 
-  async generate(payload: Record<string, unknown>) {
-    return this.encrypter.encrypt(payload)
+  async revoke(jti: string): Promise<void> {
+    await this.cache.del(this.key(jti))
+  }
+
+  async revokeAllForUser(userId: string): Promise<void> {
+    const keys = await this.cache.keys(`refresh_token:*`)
+    const tokens = await Promise.all(
+      keys.map(async (key) => {
+        const uid = await this.cache.get(key)
+        return { key, uid }
+      }),
+    )
+    const keysToDelete = tokens
+      .filter((t) => t.uid === userId)
+      .map((t) => t.key)
+
+    if (keysToDelete.length > 0) {
+      await this.cache.del(keysToDelete)
+    }
+  }
+
+  private key(jti: string): string {
+    return `refresh_token:${jti}`
+  }
+
+  async revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void> {
+    const keys = await this.cache.keys('refresh_token:*')
+
+    const tokens = await Promise.all(
+      keys.map(async (key) => {
+        const uid = await this.cache.get(key)
+        return { key, uid }
+      }),
+    )
+
+    const keysToDelete = tokens
+      .filter((t) => t.uid === userId && t.key !== this.key(exceptJti))
+      .map((t) => t.key)
+
+    if (keysToDelete.length > 0) {
+      await this.cache.del(keysToDelete)
+    }
   }
 }
 </file>
@@ -7530,6 +7370,102 @@ export class UploadAvatarController {
     }
   }
 }
+</file>
+
+<file path="src/infra/http/controllers/user/__tests__/edit-user-avatar.integration.e2e-spec.ts">
+import request from 'supertest'
+import { INestApplication, VersioningType } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { AppModule } from '@/infra/app.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { UserFactory } from 'test/factories/make-user'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { TokenService } from '@/infra/auth/token.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
+
+describe('Edit User Avatar (E2E)', () => {
+  let app: INestApplication
+  let prisma: PrismaService
+  let userFactory: UserFactory
+  let token: TokenService
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
+    }).compile()
+
+    app = moduleRef.createNestApplication()
+    app.enableVersioning({
+      type: VersioningType.URI,
+    })
+
+    prisma = moduleRef.get(PrismaService)
+    userFactory = moduleRef.get(UserFactory)
+    token = moduleRef.get(TokenService)
+
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await prisma.$disconnect()
+    await app.close()
+  })
+
+  it('[INTEGRATION] → should upload an avatar and assign it to the user', async () => {
+    const user = await userFactory.makePrismaUser({
+      name: 'Test User',
+      email: 'test@example.com',
+      role: 'OPERATOR',
+    })
+
+    const accessToken = await token.generateAccessToken({
+      sub: user.id.toString(),
+      role: user.role,
+      jti: randomUUID(),
+    })
+
+    const avatarUploadRes = await request(app.getHttpServer())
+      .post('/v1/avatar')
+      .set('Authorization', `Bearer ${accessToken.token}`)
+      .attach('file', './test/e2e/sample-upload.png')
+
+    const avatarId = avatarUploadRes.body.data
+
+    const payload = {
+      name: 'Updated User',
+      avatarId,
+      addresses: [
+        {
+          street: 'New Street',
+          number: '202',
+          neighborhood: 'New Neighborhood',
+          city: 'New City',
+          state: 'New State',
+          zipCode: '11111-111',
+        },
+      ],
+    }
+
+    await request(app.getHttpServer())
+      .patch(`/v1/users/${user.id}`)
+      .set('Authorization', `Bearer ${accessToken.token}`)
+      .send(payload)
+      .expect(200)
+
+    const userOnDatabase = await prisma.user.findUnique({
+      where: { id: user.id.toString() },
+    })
+
+    const avatarOnDatabase = await prisma.avatar.findUnique({
+      where: { id: avatarId },
+    })
+
+    expect(userOnDatabase?.avatarId).toBe(avatarId)
+    expect(avatarOnDatabase?.userId).toBe(user.id.toString())
+  })
+})
 </file>
 
 <file path="src/infra/http/controllers/user/__tests__/refresh-token.controller.e2e-spec.ts">
@@ -7709,105 +7645,6 @@ describe('Refresh Token (E2E)', () => {
         message: 'Unauthorized',
       }),
     )
-  })
-})
-</file>
-
-<file path="src/infra/http/controllers/user/__tests__/reset-password.integration.e2e-spec.ts">
-import { INestApplication, VersioningType } from '@nestjs/common'
-import { Test } from '@nestjs/testing'
-import { AppModule } from '@/infra/app.module'
-import { UserFactory } from 'test/factories/make-user'
-import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
-import { PrismaService } from '@/infra/database/prisma/prisma.service'
-import request from 'supertest'
-import { User } from '@/domain/user/enterprise/entities/user'
-import { FakeMailer } from 'test/mail/fake-mailer'
-import { MailRepository } from '@/infra/mail/mail-repository'
-import { RedisService } from '@/infra/cache/redis/redis.service'
-import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
-import { CacheModule } from '@/infra/cache/cache.module'
-import { EnvModule } from '@/infra/env/env.module'
-
-describe('Reset Password Flow (Integration)', () => {
-  let app: INestApplication
-  let prisma: PrismaService
-  let userFactory: UserFactory
-  let mailer: FakeMailer
-  let cacheService: RedisService
-  let refreshTokenService: RefreshTokenService
-
-  beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule, CacheModule, EnvModule],
-      providers: [UserFactory, FakeMailer, RefreshTokenService, RedisService],
-    })
-      .overrideProvider(MailRepository)
-      .useClass(FakeMailer)
-      .compile()
-
-    app = moduleRef.createNestApplication()
-    app.enableVersioning({
-      type: VersioningType.URI,
-    })
-
-    prisma = moduleRef.get(PrismaService)
-    userFactory = moduleRef.get(UserFactory)
-    mailer = moduleRef.get(MailRepository) as FakeMailer
-    cacheService = moduleRef.get(RedisService)
-    refreshTokenService = moduleRef.get(RefreshTokenService)
-
-    await app.init()
-  })
-
-  afterAll(async () => {
-    await app.close()
-  })
-
-  beforeEach(async () => {
-    await prisma.$executeRawUnsafe(
-      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
-    )
-    mailer.sent.length = 0
-  })
-
-  it('should reset the password successfully', async () => {
-    const user: User = await userFactory.makePrismaUser({
-      email: 'example@email.com',
-      passwordHash: 'old-password',
-    })
-
-    const refreshToken = await refreshTokenService.create(user.id.toString())
-
-    await request(app.getHttpServer())
-      .post('/v1/users/forgot-password')
-      .send({ email: user.email })
-      .expect(204)
-
-    expect(mailer.sent).toHaveLength(1)
-
-    const html = mailer.sent[0].html
-    const tokenMatch = html.match(/token=([a-zA-Z0-9._-]+)/)
-    const token = tokenMatch?.[1]
-
-    expect(token).toBeDefined()
-
-    await request(app.getHttpServer())
-      .post('/v1/users/reset-password')
-      .send({
-        token,
-        password: 'new-password',
-      })
-      .expect(204)
-
-    const updatedUser = await prisma.user.findUniqueOrThrow({
-      where: { id: user.id.toString() },
-    })
-
-    expect(updatedUser.passwordHash).not.toBe(user.passwordHash)
-
-    const storedToken = await cacheService.get(`refresh_token:${refreshToken}`)
-    expect(storedToken).toBeNull()
   })
 })
 </file>
@@ -8125,6 +7962,69 @@ export class ListUsersController {
     throw result.value
   }
 }
+</file>
+
+<file path="src/infra/http/controllers/user/logout-user.controller.ts">
+import {
+  Controller,
+  HttpCode,
+  Post,
+  UseGuards,
+  UseFilters,
+} from '@nestjs/common'
+import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-user'
+import { CurrentUser } from '@/infra/auth/current-user.decorator'
+import { JwtAuthGuard } from '@/infra/auth/jwt-auth.guard'
+import { UserErrorFilter } from '../../filters/user-error.filter'
+import {
+  ApiInternalServerErrorResponse,
+  ApiNoContentResponse,
+  ApiOperation,
+  ApiTags,
+  ApiUnauthorizedResponse,
+} from '@nestjs/swagger'
+import { InternalServerErrorDto } from '../../dtos/error/generic'
+import { UserUnauthorizedDto } from '../../dtos/error/user'
+import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
+
+@UseFilters(UserErrorFilter)
+@ApiTags('Users')
+@ServiceTag('user')
+@Controller({ path: 'users', version: '1' })
+export class LogoutUserController {
+  constructor(private logoutUserUseCase: LogoutUserUseCase) {}
+
+  @Post('logout')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(204)
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: 'Logout user by invalidating refresh token' })
+  @ApiNoContentResponse({ description: 'User logged out successfully' })
+  @ApiUnauthorizedResponse({
+    description: 'User is not authenticated',
+    type: UserUnauthorizedDto,
+  })
+  @ApiInternalServerErrorResponse({
+    description: 'Unexpected error',
+    type: InternalServerErrorDto,
+  })
+  async handle(@CurrentUser() user: UserPayload) {
+    const result = await this.logoutUserUseCase.execute({ jti: user.jti })
+
+    if (result.isLeft()) throw result.value
+  }
+}
+</file>
+
+<file path="src/infra/http/dtos/requests/user/index.ts">
+export * from './authenticate-request.dto'
+export * from './create-user-request.dto'
+export * from './edit-user-request.dto'
+export * from './edit-user-role-request.dto'
+export * from './reset-password-request.dto'
+export * from './forgot-password-request.dto'
+export * from './edit-user-password-request.dto'
 </file>
 
 <file path="src/infra/http/dtos/response/user/index.ts">
@@ -8649,6 +8549,83 @@ export class EditUserUseCase {
 }
 </file>
 
+<file path="src/domain/user/application/use-cases/refresh-user-token.ts">
+import { left, right, type Either } from '@/core/either'
+import { Injectable } from '@nestjs/common'
+import { JwtService } from '@nestjs/jwt'
+import { UserUnauthorizedError } from './errors/user-unauthorized-error'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { TokenRepository } from '@/infra/auth/token-repository'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
+
+type RefreshUserTokenUseCaseRequest = {
+  refreshToken: string
+}
+
+type RefreshUserTokenUseCaseResponse = Either<
+  UserUnauthorizedError,
+  {
+    accessToken: {
+      token: string
+      expiresIn: number
+    }
+    refreshToken: {
+      token: string
+      expiresIn: number
+    }
+    expiresIn: number
+  }
+>
+
+@Injectable()
+export class RefreshUserTokenUseCase {
+  constructor(
+    private jwtService: JwtService,
+    private tokenRepository: TokenRepository,
+    private refreshTokenRepository: RefreshTokenRepository,
+  ) {}
+
+  async execute({
+    refreshToken,
+  }: RefreshUserTokenUseCaseRequest): Promise<RefreshUserTokenUseCaseResponse> {
+    if (!refreshToken) {
+      return left(new UserUnauthorizedError())
+    }
+
+    let payload: UserPayload
+
+    try {
+      payload = this.jwtService.verify(refreshToken)
+    } catch {
+      return left(new UserUnauthorizedError())
+    }
+
+    const isValid = await this.refreshTokenRepository.validate(payload.jti)
+
+    if (!isValid) {
+      return left(new UserUnauthorizedError())
+    }
+
+    const jti = await this.refreshTokenRepository.create(payload.sub)
+
+    const accessToken = await this.tokenRepository.generateAccessToken({
+      sub: payload.sub,
+      role: payload.role,
+      jti,
+    })
+
+    return right({
+      accessToken,
+      refreshToken: {
+        token: refreshToken,
+        expiresIn: payload.exp,
+      },
+      expiresIn: accessToken.expiresIn,
+    })
+  }
+}
+</file>
+
 <file path="src/infra/auth/auth.module.ts">
 import { Module } from '@nestjs/common'
 import { JwtModule } from '@nestjs/jwt'
@@ -8707,38 +8684,51 @@ import { TokenRepository } from './token-repository'
 export class AuthModule {}
 </file>
 
-<file path="src/infra/auth/jwt.strategy.ts">
+<file path="src/infra/auth/token.service.ts">
 import { Injectable } from '@nestjs/common'
-import { PassportStrategy } from '@nestjs/passport'
-import { ExtractJwt, Strategy } from 'passport-jwt'
-import { z } from 'zod'
-import { EnvService } from '../env/env.service'
-import { roleSchema } from './casl/roles'
-
-const tokenPayloadSchema = z.object({
-  sub: z.string().uuid(),
-  role: roleSchema,
-  iat: z.number(),
-  exp: z.number(),
-  jti: z.string().uuid(),
-})
-
-export type UserPayload = z.infer<typeof tokenPayloadSchema>
+import { Encrypter } from '@/shared/cryptography/encrypter'
+import { TokenRepository } from './token-repository'
 
 @Injectable()
-export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor(config: EnvService) {
-    const publicKey = config.get('JWT_PUBLIC_KEY')
+export class TokenService implements TokenRepository {
+  constructor(private encrypter: Encrypter) {}
 
-    super({
-      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: Buffer.from(publicKey, 'base64'),
-      algorithms: ['RS256'],
+  async generateAccessToken(payload: {
+    sub: string
+    role: string
+    jti: string
+  }) {
+    const now = Math.floor(Date.now() / 1000)
+    const exp = now + 60 * 60 // 1 hour
+
+    const token = await this.encrypter.encrypt({
+      ...payload,
+      iat: now,
+      exp,
     })
+
+    return { token, expiresIn: exp }
   }
 
-  async validate(payload: UserPayload) {
-    return tokenPayloadSchema.parse(payload)
+  async generateRefreshToken(payload: {
+    sub: string
+    role: string
+    jti: string
+  }) {
+    const now = Math.floor(Date.now() / 1000)
+    const exp = now + 60 * 60 * 24 * 7 // 7 days
+
+    const token = await this.encrypter.encrypt({
+      ...payload,
+      iat: now,
+      exp,
+    })
+
+    return { token, expiresIn: exp }
+  }
+
+  async generate(payload: Record<string, unknown>) {
+    return this.encrypter.encrypt(payload)
   }
 }
 </file>
@@ -8829,6 +8819,105 @@ describe('Logout User (E2E)', () => {
       .set('Authorization', 'Bearer invalid.token.here')
 
     expect(response.statusCode).toBe(401)
+  })
+})
+</file>
+
+<file path="src/infra/http/controllers/user/__tests__/reset-password.integration.e2e-spec.ts">
+import { INestApplication, VersioningType } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { AppModule } from '@/infra/app.module'
+import { UserFactory } from 'test/factories/make-user'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import request from 'supertest'
+import { User } from '@/domain/user/enterprise/entities/user'
+import { FakeMailer } from 'test/mail/fake-mailer'
+import { MailRepository } from '@/infra/mail/mail-repository'
+import { RedisService } from '@/infra/cache/redis/redis.service'
+import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
+import { CacheModule } from '@/infra/cache/cache.module'
+import { EnvModule } from '@/infra/env/env.module'
+
+describe('Reset Password Flow (Integration)', () => {
+  let app: INestApplication
+  let prisma: PrismaService
+  let userFactory: UserFactory
+  let mailer: FakeMailer
+  let cacheService: RedisService
+  let refreshTokenService: RefreshTokenService
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule, UserDatabaseModule, CacheModule, EnvModule],
+      providers: [UserFactory, FakeMailer, RefreshTokenService, RedisService],
+    })
+      .overrideProvider(MailRepository)
+      .useClass(FakeMailer)
+      .compile()
+
+    app = moduleRef.createNestApplication()
+    app.enableVersioning({
+      type: VersioningType.URI,
+    })
+
+    prisma = moduleRef.get(PrismaService)
+    userFactory = moduleRef.get(UserFactory)
+    mailer = moduleRef.get(MailRepository) as FakeMailer
+    cacheService = moduleRef.get(RedisService)
+    refreshTokenService = moduleRef.get(RefreshTokenService)
+
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  beforeEach(async () => {
+    await prisma.$executeRawUnsafe(
+      'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
+    )
+    mailer.sent.length = 0
+  })
+
+  it('[INTEGRATION] → should reset the password successfully', async () => {
+    const user: User = await userFactory.makePrismaUser({
+      email: 'example@email.com',
+      passwordHash: 'old-password',
+    })
+
+    const refreshToken = await refreshTokenService.create(user.id.toString())
+
+    await request(app.getHttpServer())
+      .post('/v1/users/forgot-password')
+      .send({ email: user.email })
+      .expect(204)
+
+    expect(mailer.sent).toHaveLength(1)
+
+    const html = mailer.sent[0].html
+    const tokenMatch = html.match(/token=([a-zA-Z0-9._-]+)/)
+    const token = tokenMatch?.[1]
+
+    expect(token).toBeDefined()
+
+    await request(app.getHttpServer())
+      .post('/v1/users/reset-password')
+      .send({
+        token,
+        password: 'new-password',
+      })
+      .expect(204)
+
+    const updatedUser = await prisma.user.findUniqueOrThrow({
+      where: { id: user.id.toString() },
+    })
+
+    expect(updatedUser.passwordHash).not.toBe(user.passwordHash)
+
+    const storedToken = await cacheService.get(`refresh_token:${refreshToken}`)
+    expect(storedToken).toBeNull()
   })
 })
 </file>
@@ -9115,82 +9204,6 @@ export class EditUserController {
 }
 </file>
 
-<file path="src/infra/http/controllers/user/user-controllers.module.ts">
-import { Module } from '@nestjs/common'
-import { CreateUserController } from './create-user.controller'
-import { CreateUserUseCase } from '@/domain/user/application/use-cases/create-user'
-import { FindUserByIdController } from './find-user-by-id.controller'
-import { FindUserByIdUseCase } from '@/domain/user/application/use-cases/find-user-by-id'
-import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
-import { AuthenticateUserController } from './authenticate-user.controller'
-import { AuthenticateUserUseCase } from '@/domain/user/application/use-cases/authenticate-user'
-import { CaslAbilityModule } from '@/infra/auth/casl/casl-ability.module'
-import { EditUserController } from './edit-user.controller'
-import { EditUserUseCase } from '@/domain/user/application/use-cases/edit-user'
-import { EditUserStatusController } from './edit-user-status.controller'
-import { EditUserStatusUseCase } from '@/domain/user/application/use-cases/edit-user-status'
-import { EditUserRoleController } from './edit-user-role.controller'
-import { EditUserRoleUseCase } from '@/domain/user/application/use-cases/edit-user-role'
-import { ListUsersController } from './list-users.controller'
-import { ListUsersUseCase } from '@/domain/user/application/use-cases/list-users'
-import { StorageModule } from '@/infra/storage/storage.module'
-import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
-import { RefreshTokenController } from './refresh-token.controller'
-import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/refresh-user-token'
-import { AuthModule } from '@/infra/auth/auth.module'
-import { LogoutUserController } from './logout-user.controller'
-import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-user'
-import { MailerModule } from '@/infra/mail/mailer.module'
-import { ResetPasswordController } from './reset-password.controller'
-import { ResetPasswordUseCase } from '@/domain/user/application/use-cases/reset-password'
-import { ForgotPasswordController } from './forgot-password.controller'
-import { ForgotPasswordUseCase } from '@/domain/user/application/use-cases/forgot-password'
-import { EnvModule } from '@/infra/env/env.module'
-import { EditUserPasswordController } from './edit-user-password.controller'
-import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edit-user-password'
-
-@Module({
-  imports: [
-    UserDatabaseModule,
-    CryptographyModule,
-    CaslAbilityModule,
-    StorageModule,
-    AuthModule,
-    MailerModule,
-    EnvModule,
-  ],
-  controllers: [
-    AuthenticateUserController,
-    CreateUserController,
-    EditUserRoleController,
-    EditUserStatusController,
-    EditUserController,
-    FindUserByIdController,
-    ListUsersController,
-    RefreshTokenController,
-    LogoutUserController,
-    ResetPasswordController,
-    ForgotPasswordController,
-    EditUserPasswordController,
-  ],
-  providers: [
-    AuthenticateUserUseCase,
-    CreateUserUseCase,
-    EditUserRoleUseCase,
-    EditUserStatusUseCase,
-    EditUserUseCase,
-    FindUserByIdUseCase,
-    ListUsersUseCase,
-    RefreshUserTokenUseCase,
-    LogoutUserUseCase,
-    ResetPasswordUseCase,
-    ForgotPasswordUseCase,
-    EditUserPasswordUseCase,
-  ],
-})
-export class UserControllersModule {}
-</file>
-
 <file path="test/factories/make-user.ts">
 import { faker } from '@faker-js/faker'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
@@ -9269,86 +9282,38 @@ export class UserFactory {
 }
 </file>
 
-<file path="src/domain/user/application/use-cases/authenticate-user.ts">
-import { left, right, type Either } from '@/core/either'
-import { UsersRepository } from '@/domain/user/application/repositories/user-repository'
+<file path="src/infra/auth/jwt.strategy.ts">
 import { Injectable } from '@nestjs/common'
-import { WrongCredentialsError } from './errors/wrong-credentials-error'
-import { HashComparer } from '../../../../shared/cryptography/hash-comparer'
-import { UserInactiveError } from './errors/user-inactive-error'
-import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
-import { TokenRepository } from '@/infra/auth/token-repository'
+import { PassportStrategy } from '@nestjs/passport'
+import { ExtractJwt, Strategy } from 'passport-jwt'
+import { z } from 'zod'
+import { EnvService } from '../env/env.service'
+import { roleSchema } from './casl/roles'
 
-type AuthenticateUserUseCaseRequest = {
-  email: string
-  password: string
-}
+const tokenPayloadSchema = z.object({
+  sub: z.string().uuid(),
+  role: roleSchema,
+  iat: z.number(),
+  exp: z.number(),
+  jti: z.string().uuid(),
+})
 
-type AuthenticateUserUseCaseResponse = Either<
-  WrongCredentialsError | UserInactiveError,
-  {
-    accessToken: {
-      token: string
-      expiresIn: number
-    }
-    refreshToken: {
-      token: string
-      expiresIn: number
-    }
-    expiresIn: number
-  }
->
+export type UserPayload = z.infer<typeof tokenPayloadSchema>
 
 @Injectable()
-export class AuthenticateUserUseCase {
-  constructor(
-    private usersRepository: UsersRepository,
-    private hashComparar: HashComparer,
-    private tokenRepository: TokenRepository,
-    private refreshTokenRepository: RefreshTokenRepository,
-  ) {}
+export class JwtStrategy extends PassportStrategy(Strategy) {
+  constructor(config: EnvService) {
+    const publicKey = config.get('JWT_PUBLIC_KEY')
 
-  async execute({
-    email,
-    password,
-  }: AuthenticateUserUseCaseRequest): Promise<AuthenticateUserUseCaseResponse> {
-    const user = await this.usersRepository.findByEmail(email)
-
-    if (!user) {
-      return left(new WrongCredentialsError())
-    }
-
-    if (!user.isActive) {
-      return left(new UserInactiveError())
-    }
-
-    const isPasswordValid = await this.hashComparar.compare(
-      password,
-      user.passwordHash,
-    )
-
-    if (!isPasswordValid) {
-      return left(new WrongCredentialsError())
-    }
-    const jti = await this.refreshTokenRepository.create(user.id.toString())
-
-    const accessToken = await this.tokenRepository.generateAccessToken({
-      sub: user.id.toString(),
-      role: user.role,
-      jti,
+    super({
+      jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
+      secretOrKey: Buffer.from(publicKey, 'base64'),
+      algorithms: ['RS256'],
     })
+  }
 
-    const refreshToken = await this.tokenRepository.generateRefreshToken({
-      sub: user.id.toString(),
-      role: user.role,
-      jti,
-    })
-
-    return right({
-      accessToken,
-      refreshToken,
-      expiresIn: accessToken.expiresIn,
-    })
+  async validate(payload: UserPayload) {
+    return tokenPayloadSchema.parse(payload)
   }
 }
 </file>
@@ -9648,6 +9613,166 @@ describe('Authenticate User (E2E)', () => {
 })
 </file>
 
+<file path="src/infra/http/controllers/user/user-controllers.module.ts">
+import { Module } from '@nestjs/common'
+import { CreateUserController } from './create-user.controller'
+import { CreateUserUseCase } from '@/domain/user/application/use-cases/create-user'
+import { FindUserByIdController } from './find-user-by-id.controller'
+import { FindUserByIdUseCase } from '@/domain/user/application/use-cases/find-user-by-id'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { AuthenticateUserController } from './authenticate-user.controller'
+import { AuthenticateUserUseCase } from '@/domain/user/application/use-cases/authenticate-user'
+import { CaslAbilityModule } from '@/infra/auth/casl/casl-ability.module'
+import { EditUserController } from './edit-user.controller'
+import { EditUserUseCase } from '@/domain/user/application/use-cases/edit-user'
+import { EditUserStatusController } from './edit-user-status.controller'
+import { EditUserStatusUseCase } from '@/domain/user/application/use-cases/edit-user-status'
+import { EditUserRoleController } from './edit-user-role.controller'
+import { EditUserRoleUseCase } from '@/domain/user/application/use-cases/edit-user-role'
+import { ListUsersController } from './list-users.controller'
+import { ListUsersUseCase } from '@/domain/user/application/use-cases/list-users'
+import { StorageModule } from '@/infra/storage/storage.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { RefreshTokenController } from './refresh-token.controller'
+import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/refresh-user-token'
+import { AuthModule } from '@/infra/auth/auth.module'
+import { LogoutUserController } from './logout-user.controller'
+import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-user'
+import { MailerModule } from '@/infra/mail/mailer.module'
+import { ResetPasswordController } from './reset-password.controller'
+import { ResetPasswordUseCase } from '@/domain/user/application/use-cases/reset-password'
+import { ForgotPasswordController } from './forgot-password.controller'
+import { ForgotPasswordUseCase } from '@/domain/user/application/use-cases/forgot-password'
+import { EnvModule } from '@/infra/env/env.module'
+import { EditUserPasswordController } from './edit-user-password.controller'
+import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edit-user-password'
+
+@Module({
+  imports: [
+    UserDatabaseModule,
+    CryptographyModule,
+    CaslAbilityModule,
+    StorageModule,
+    AuthModule,
+    MailerModule,
+    EnvModule,
+  ],
+  controllers: [
+    AuthenticateUserController,
+    CreateUserController,
+    EditUserRoleController,
+    EditUserStatusController,
+    EditUserController,
+    FindUserByIdController,
+    ListUsersController,
+    RefreshTokenController,
+    LogoutUserController,
+    ResetPasswordController,
+    ForgotPasswordController,
+    EditUserPasswordController,
+  ],
+  providers: [
+    AuthenticateUserUseCase,
+    CreateUserUseCase,
+    EditUserRoleUseCase,
+    EditUserStatusUseCase,
+    EditUserUseCase,
+    FindUserByIdUseCase,
+    ListUsersUseCase,
+    RefreshUserTokenUseCase,
+    LogoutUserUseCase,
+    ResetPasswordUseCase,
+    ForgotPasswordUseCase,
+    EditUserPasswordUseCase,
+  ],
+})
+export class UserControllersModule {}
+</file>
+
+<file path="src/domain/user/application/use-cases/authenticate-user.ts">
+import { left, right, type Either } from '@/core/either'
+import { UsersRepository } from '@/domain/user/application/repositories/user-repository'
+import { Injectable } from '@nestjs/common'
+import { WrongCredentialsError } from './errors/wrong-credentials-error'
+import { HashComparer } from '../../../../shared/cryptography/hash-comparer'
+import { UserInactiveError } from './errors/user-inactive-error'
+import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { TokenRepository } from '@/infra/auth/token-repository'
+
+type AuthenticateUserUseCaseRequest = {
+  email: string
+  password: string
+}
+
+type AuthenticateUserUseCaseResponse = Either<
+  WrongCredentialsError | UserInactiveError,
+  {
+    accessToken: {
+      token: string
+      expiresIn: number
+    }
+    refreshToken: {
+      token: string
+      expiresIn: number
+    }
+    expiresIn: number
+  }
+>
+
+@Injectable()
+export class AuthenticateUserUseCase {
+  constructor(
+    private usersRepository: UsersRepository,
+    private hashComparar: HashComparer,
+    private tokenRepository: TokenRepository,
+    private refreshTokenRepository: RefreshTokenRepository,
+  ) {}
+
+  async execute({
+    email,
+    password,
+  }: AuthenticateUserUseCaseRequest): Promise<AuthenticateUserUseCaseResponse> {
+    const user = await this.usersRepository.findByEmail(email)
+
+    if (!user) {
+      return left(new WrongCredentialsError())
+    }
+
+    if (!user.isActive) {
+      return left(new UserInactiveError())
+    }
+
+    const isPasswordValid = await this.hashComparar.compare(
+      password,
+      user.passwordHash,
+    )
+
+    if (!isPasswordValid) {
+      return left(new WrongCredentialsError())
+    }
+    const jti = await this.refreshTokenRepository.create(user.id.toString())
+
+    const accessToken = await this.tokenRepository.generateAccessToken({
+      sub: user.id.toString(),
+      role: user.role,
+      jti,
+    })
+
+    const refreshToken = await this.tokenRepository.generateRefreshToken({
+      sub: user.id.toString(),
+      role: user.role,
+      jti,
+    })
+
+    return right({
+      accessToken,
+      refreshToken,
+      expiresIn: accessToken.expiresIn,
+    })
+  }
+}
+</file>
+
 <file path="src/infra/http/controllers/user/__tests__/edit-user-role.controller.e2e-spec.ts">
 import { AppModule } from '@/infra/app.module'
 import { VersioningType, type INestApplication } from '@nestjs/common'
@@ -9719,6 +9844,7 @@ describe('Edit User Role (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -9729,6 +9855,7 @@ describe('Edit User Role (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
 
     supervisorUser = await userFactory.makePrismaUser({
@@ -9739,6 +9866,7 @@ describe('Edit User Role (E2E)', () => {
     supervisorAccessToken = await token.generateAccessToken({
       sub: supervisorUser.id.toString(),
       role: supervisorUser.role,
+      jti: randomUUID(),
     })
 
     targetUser = await userFactory.makePrismaUser({
@@ -9952,6 +10080,7 @@ describe('Edit User Status (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     managerUser = await userFactory.makePrismaUser({
@@ -9962,6 +10091,7 @@ describe('Edit User Status (E2E)', () => {
     managerAccessToken = await token.generateAccessToken({
       sub: managerUser.id.toString(),
       role: managerUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -9972,6 +10102,7 @@ describe('Edit User Status (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
 
     targetUser = await userFactory.makePrismaUser({
@@ -10150,6 +10281,7 @@ describe('Find User By Id (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -10160,6 +10292,7 @@ describe('Find User By Id (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
 
     targetUser = await userFactory.makePrismaUser({
@@ -10262,6 +10395,7 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 const createUserEndpoint = '/v1/users'
 
@@ -10316,6 +10450,7 @@ describe('Create User (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -10326,6 +10461,7 @@ describe('Create User (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
   })
 
@@ -10507,6 +10643,7 @@ import type { User } from '@/domain/user/enterprise/entities/user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 describe('Edit User (E2E)', () => {
   let app: INestApplication
@@ -10554,6 +10691,7 @@ describe('Edit User (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
   })
 
@@ -10735,6 +10873,7 @@ import type { User } from '@/domain/user/enterprise/entities/user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 describe('List Users (E2E)', () => {
   let app: INestApplication
@@ -10788,6 +10927,7 @@ describe('List Users (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -10798,6 +10938,7 @@ describe('List Users (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
 
     const usersToCreate = Array.from(
@@ -10913,6 +11054,7 @@ import { Uploader } from '@/shared/storage/uploader'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 describe('Upload Avatar (E2E)', () => {
   let app: INestApplication
@@ -10967,6 +11109,7 @@ describe('Upload Avatar (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
   })
 

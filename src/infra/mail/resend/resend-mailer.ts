@@ -24,4 +24,13 @@ export class ResendMailer implements MailRepository {
       html: params.html,
     })
   }
+
+  async verify(): Promise<void> {
+    await this.client.emails.send({
+      to: 'healthcheck@example.com',
+      from: 'no-reply@example.com',
+      subject: '[HealthCheck] Email',
+      html: '<p>Health check</p>',
+    })
+  }
 }

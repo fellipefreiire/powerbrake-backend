@@ -16,6 +16,7 @@ import { PrismaHealthIndicator } from '../indicators/prisma-health.indicator'
 import { RedisHealthIndicator } from '../indicators/redis-health.indicator'
 import { S3HealthIndicator } from '../indicators/s3-health.indicator'
 import { HealthCheckResponseDto } from '../dtos/common/health-check-response.dto'
+import { MailHealthIndicator } from '../indicators/mailer-health.indicator'
 
 @ApiTags('Health')
 @ServiceTag('health')
@@ -27,6 +28,7 @@ export class HealthController {
     private prisma: PrismaHealthIndicator,
     private redis: RedisHealthIndicator,
     private s3: S3HealthIndicator,
+    private mailer: MailHealthIndicator,
   ) {}
 
   @Get()
@@ -50,6 +52,7 @@ export class HealthController {
       () => this.prisma.isHealthy('database'),
       () => this.redis.isHealthy('redis'),
       () => this.s3.isHealthy('s3'),
+      () => this.mailer.isHealthy('reSend'),
     ])
   }
 }
