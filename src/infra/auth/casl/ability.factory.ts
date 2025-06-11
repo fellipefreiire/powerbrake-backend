@@ -10,10 +10,12 @@ import { userSubject } from './subjects/user'
 import { permissions } from './permissions'
 import type { User } from './models/user'
 import { avatarSubject } from './subjects/avatar'
+import { auditLogSubject } from './subjects/audit-log'
 
 export const appAbilitiesSchema = z.union([
   userSubject,
   avatarSubject,
+  auditLogSubject,
   z.tuple([z.literal('manage'), z.literal('all')]),
 ])
 type AppAbilities = z.infer<typeof appAbilitiesSchema>

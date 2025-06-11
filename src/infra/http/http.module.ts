@@ -11,11 +11,14 @@ import { CacheModule } from '../cache/cache.module'
 import { StorageModule } from '../storage/storage.module'
 import { MailHealthIndicator } from './indicators/mailer-health.indicator'
 import { MailerModule } from '../mail/mailer.module'
+import { AuditLogControllersModule } from './controllers/audit-log/audit-log-controllers.module'
 
 @Module({
   imports: [
     UserControllersModule,
     AvatarControllersModule,
+    AuditLogControllersModule,
+
     TerminusModule,
     PrismaModule,
     CacheModule,

@@ -11,6 +11,11 @@ export class InMemoryUsersRepository implements UsersRepository {
     return user || null
   }
 
+  async findManyByIds(ids: string[]): Promise<User[]> {
+    const idSet = new Set(ids)
+    return this.items.filter((user) => idSet.has(user.id.toString()))
+  }
+
   async findByEmail(email: string) {
     const user = this.items.find((item) => item.email === email)
 

@@ -103,6 +103,7 @@ src/
           __tests__/
             create-audit-log.spec.ts
           create-audit-log.ts
+          list-audit-logs.ts
       enterprise/
         entities/
           audit-log.ts
@@ -167,9 +168,11 @@ src/
           user-can-read-self.handler.ts
           user-can-update-self.handler.ts
         models/
+          audit-log.ts
           avatar.ts
           user.ts
         subjects/
+          audit-log.ts
           avatar.ts
           user.ts
         ability.factory.ts
@@ -238,6 +241,9 @@ src/
       events.module.ts
     http/
       controllers/
+        audit-log/
+          audit-log-controllers.module.ts
+          list-audit-logs.controller.ts
         avatar/
           __tests__/
             upload-avatar.controller.e2e-spec.ts
@@ -317,6 +323,9 @@ src/
             index.ts
             reset-password-request.dto.ts
         response/
+          audit-log/
+            audit-log-list-response.dto.ts
+            index.ts
           avatar/
             index.ts
             upload-avatar-response.dto.ts
@@ -328,6 +337,7 @@ src/
             user-response.dto.ts
       filters/
         app-error.filter.ts
+        audit-log-error.filter.ts
         avatar-error.filter.ts
         user-error.filter.ts
       indicators/
@@ -340,6 +350,7 @@ src/
         parse-uuid.pipe.ts
         zod-validation.pipe.ts
       presenters/
+        audit-log.presenter.ts
         user.presenter.ts
       http.module.ts
     logger/
@@ -439,170 +450,440 @@ vitest.config.mjs
 <files>
 This section contains the contents of the repository's files.
 
-<file path="src/domain/audit-log/application/subscribers/user/__tests__/on-user-password-changed.spec.ts">
-import { vi } from 'vitest'
-import { waitFor } from 'test/utils/wait-for'
-import { OnUserPasswordChanged } from '@/domain/audit-log/application/subscribers/user/on-user-password-changed'
-import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
-import { makeUser } from 'test/factories/make-user'
-import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
-import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
-import { DomainEvents } from '@/core/events/domain-events'
+<file path="src/domain/audit-log/application/use-cases/list-audit-logs.ts">
+import { Injectable } from '@nestjs/common'
+import { type Either, right } from '@/core/either'
+import type {
+  CursorPaginationParams,
+  CursorPaginationMeta,
+} from '@/core/repositories/pagination-params'
+import { AuditLog } from '../../enterprise/entities/audit-log'
+import {
+  AuditLogRepository,
+  ListAuditLogsFilters,
+} from '../repositories/audit-log-repository'
+import { ActorType } from '@prisma/client'
+import { UsersRepository } from '@/domain/user/application/repositories/user-repository'
 
-let inMemoryAuditLogRepository: InMemoryAuditLogRepository
-let inMemoryUsersRepository: InMemoryUsersRepository
-let createAuditLogUseCase: CreateAuditLogUseCase
-let createAuditLogSpy: ReturnType<typeof vi.spyOn>
+type ListAuditLogsUseCaseRequest = {
+  params: ListAuditLogsFilters
+  cursorParams: CursorPaginationParams
+}
 
-describe('On User Password Changed (subscriber)', () => {
-  beforeEach(() => {
-    inMemoryUsersRepository = new InMemoryUsersRepository()
-    inMemoryAuditLogRepository = new InMemoryAuditLogRepository()
-    createAuditLogUseCase = new CreateAuditLogUseCase(
-      inMemoryAuditLogRepository,
+type AuditLogWithActorInfo = AuditLog & {
+  actorName: string
+  actorEmail: string
+}
+
+type ListAuditLogsUseCaseResponse = Either<
+  null,
+  {
+    data: AuditLogWithActorInfo[]
+    meta: CursorPaginationMeta
+  }
+>
+
+@Injectable()
+export class ListAuditLogsUseCase {
+  constructor(
+    private auditLogsRepository: AuditLogRepository,
+    private usersRepository: UsersRepository,
+    // private clientsRepository: ClientsRepository,
+  ) {}
+
+  async execute({
+    params,
+    cursorParams,
+  }: ListAuditLogsUseCaseRequest): Promise<ListAuditLogsUseCaseResponse> {
+    const {
+      actorType,
+      actorEmail,
+      entity,
+      action,
+      entityId,
+      startDate,
+      endDate,
+    } = params
+
+    let actorId: string | undefined
+
+    if (actorEmail) {
+      actorId = await this.auditLogsRepository.resolveActorIdByEmail(
+        actorType,
+        actorEmail,
+      )
+      if (!actorId) {
+        return right({
+          data: [],
+          meta: {
+            count: 0,
+            hasNextPage: false,
+            nextCursor: null,
+          },
+        })
+      }
+    }
+
+    const [logs, hasNextPage] = await this.auditLogsRepository.findMany(
+      {
+        actorType,
+        actorId,
+        entity,
+        action,
+        entityId,
+        startDate,
+        endDate,
+      },
+      cursorParams,
     )
-    createAuditLogSpy = vi.spyOn(createAuditLogUseCase, 'execute')
 
-    new OnUserPasswordChanged(createAuditLogUseCase)
-  })
+    const userIds = logs
+      .filter((log) => log.actorType === ActorType.USER)
+      .map((log) => log.actorId)
 
-  it('should create audit log when user password is changed', async () => {
-    const user = makeUser()
+    const uniqueUserIds = [...new Set(userIds)]
+    const users = await this.usersRepository.findManyByIds(uniqueUserIds)
+    const usersMap = new Map(users.map((user) => [user.id.toString(), user]))
 
-    inMemoryUsersRepository.create(user)
+    // Futuro: mesma lógica para CLIENT
+    // const clientIds = logs.filter(...).map(...)
+    // const clientsMap = ...
 
-    user.updatePassword('new-password')
+    const logsWithActors: AuditLogWithActorInfo[] = logs.map((log) => {
+      let name = '[unknown]'
+      let email = '[unknown]'
 
-    inMemoryUsersRepository.save(user)
+      if (log.actorType === ActorType.USER) {
+        const user = usersMap.get(log.actorId)
+        if (user) {
+          name = user.name
+          email = user.email
+        }
+      }
 
-    DomainEvents.dispatchEventsForAggregate(user.id)
+      // if (log.actorType === ActorType.CLIENT) {
+      //   const client = clientsMap.get(log.actorId)
+      //   if (client) {
+      //     name = client.name
+      //     email = client.email
+      //   }
+      // }
 
-    await waitFor(() => {
-      expect(createAuditLogSpy).toHaveBeenCalled()
+      return {
+        ...(log as unknown as object),
+        actorName: name,
+        actorEmail: email,
+      } as AuditLogWithActorInfo
     })
 
-    expect(inMemoryAuditLogRepository.items).toHaveLength(1)
-    expect(inMemoryAuditLogRepository.items[0]).toEqual(
-      expect.objectContaining({
-        actorId: user.id.toString(),
-        action: 'user:password_changed',
-      }),
-    )
-  })
-})
+    return right({
+      data: logsWithActors,
+      meta: {
+        count: logs.length,
+        hasNextPage,
+        nextCursor: hasNextPage ? logs[logs.length - 1].id.toString() : null,
+      },
+    })
+  }
+}
 </file>
 
-<file path="src/domain/audit-log/application/use-cases/__tests__/create-audit-log.spec.ts">
-import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
-import { beforeEach, describe, expect, it } from 'vitest'
-import { CreateAuditLogUseCase } from '../create-audit-log'
+<file path="src/infra/auth/casl/models/audit-log.ts">
+import { z } from 'zod'
 
-let sut: CreateAuditLogUseCase
-let auditLogRepository: InMemoryAuditLogRepository
+import { roleSchema } from '../roles'
 
-describe('Create Audit Log Use Case', () => {
-  beforeEach(() => {
-    auditLogRepository = new InMemoryAuditLogRepository()
-    sut = new CreateAuditLogUseCase(auditLogRepository)
-  })
-
-  it('should create a new audit log entry', async () => {
-    const result = await sut.execute({
-      actorId: 'user-1',
-      actorType: 'USER',
-      action: 'user:password_changed',
-      entity: 'USER',
-      entityId: 'user-1',
-      changes: { passwordChanged: true },
-    })
-
-    expect(result.isRight()).toBe(true)
-    expect(auditLogRepository.items).toHaveLength(1)
-    expect(auditLogRepository.items[0].action).toBe('user:password_changed')
-    expect(auditLogRepository.items[0].changes).toEqual({
-      passwordChanged: true,
-    })
-  })
+export const auditLogSchema = z.object({
+  sub: z.string(),
+  role: roleSchema,
+  __typename: z.literal('AuditLog').default('AuditLog'),
 })
+
+export type AuditLog = z.infer<typeof auditLogSchema>
 </file>
 
-<file path="src/infra/events/user/__tests__/on-user-password-changed.e2e-spec.ts">
-import { DomainEvents } from '@/core/events/domain-events'
-import { AppModule } from '@/infra/app.module'
+<file path="src/infra/auth/casl/subjects/audit-log.ts">
+import { z } from 'zod'
+import { auditLogSchema } from '../models/audit-log'
+
+export const auditLogSubject = z.tuple([
+  z.union([z.literal('manage'), z.literal('list')]),
+  z.union([z.literal('AuditLog'), auditLogSchema]),
+])
+
+export type AuditLogSubject = z.infer<typeof auditLogSubject>
+</file>
+
+<file path="src/infra/http/controllers/audit-log/audit-log-controllers.module.ts">
+import { Module } from '@nestjs/common'
+import { CaslAbilityModule } from '@/infra/auth/casl/casl-ability.module'
+import { StorageModule } from '@/infra/storage/storage.module'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
-import { PrismaService } from '@/infra/database/prisma/prisma.service'
-import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
-import { TokenService } from '@/infra/auth/token.service'
-import { INestApplication, VersioningType } from '@nestjs/common'
-import { Test } from '@nestjs/testing'
-import { UserFactory } from 'test/factories/make-user'
-import { randomUUID } from 'crypto'
-import request from 'supertest'
-import { hash } from 'bcryptjs'
-import { waitFor } from 'test/utils/wait-for'
+import { ListAuditLogsController } from './list-audit-logs.controller'
+import { ListAuditLogsUseCase } from '@/domain/audit-log/application/use-cases/list-audit-logs'
+import { AuditLogDatabaseModule } from '@/infra/database/prisma/repositories/audit-log/audit-log-database.module'
 
-describe('On user password changed (E2E)', () => {
-  let app: INestApplication
-  let prisma: PrismaService
-  let userFactory: UserFactory
-  let tokenService: TokenService
-
-  beforeAll(async () => {
-    const moduleRef = await Test.createTestingModule({
-      imports: [AppModule, UserDatabaseModule, CryptographyModule],
-      providers: [UserFactory, TokenService],
-    }).compile()
-
-    app = moduleRef.createNestApplication()
-    app.enableVersioning({ type: VersioningType.URI })
-
-    prisma = moduleRef.get(PrismaService)
-    userFactory = moduleRef.get(UserFactory)
-    tokenService = moduleRef.get(TokenService)
-
-    DomainEvents.shouldRun = true
-
-    await app.init()
-  })
-
-  afterAll(async () => {
-    await app.close()
-  })
-
-  it('should create audit log when user changes password', async () => {
-    const password = '123456'
-    const user = await userFactory.makePrismaUser({
-      passwordHash: await hash(password, 8),
-    })
-
-    const token = await tokenService.generate({
-      sub: user.id.toString(),
-      role: user.role,
-      jti: randomUUID(),
-    })
-
-    await request(app.getHttpServer())
-      .patch(`/v1/users/${user.id.toString()}/password`)
-      .set('Authorization', `Bearer ${token}`)
-      .send({
-        currentPassword: password,
-        newPassword: 'new-password',
-      })
-      .expect(204)
-
-    await waitFor(async () => {
-      const auditLog = await prisma.auditLog.findFirst({
-        where: {
-          actorId: user.id.toString(),
-          action: 'user:password_changed',
-        },
-      })
-
-      expect(auditLog).not.toBeNull()
-      expect(auditLog?.changes).toContain('passwordChanged')
-    })
-  })
+@Module({
+  imports: [
+    AuditLogDatabaseModule,
+    UserDatabaseModule,
+    CaslAbilityModule,
+    StorageModule,
+  ],
+  controllers: [ListAuditLogsController],
+  providers: [ListAuditLogsUseCase],
 })
+export class AuditLogControllersModule {}
+</file>
+
+<file path="src/infra/http/controllers/audit-log/list-audit-logs.controller.ts">
+import {
+  Controller,
+  Get,
+  HttpCode,
+  Query,
+  UseFilters,
+  UseGuards,
+} from '@nestjs/common'
+import {
+  ApiForbiddenResponse,
+  ApiInternalServerErrorResponse,
+  ApiOkResponse,
+  ApiOperation,
+  ApiQuery,
+  ApiTags,
+  ApiUnauthorizedResponse,
+  ApiUnprocessableEntityResponse,
+} from '@nestjs/swagger'
+import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
+import { CaslAbilityGuard } from '@/infra/auth/casl/casl-ability.guard'
+import { CheckPolicies } from '@/infra/auth/casl/check-policies.decorator'
+import { AuditLogPresenter } from '../../presenters/audit-log.presenter'
+import {
+  InternalServerErrorDto,
+  UnprocessableEntityDto,
+} from '../../dtos/error/generic'
+
+import { z } from 'zod'
+import { ActorType } from '@prisma/client'
+import { ListAuditLogsUseCase } from '@/domain/audit-log/application/use-cases/list-audit-logs'
+import { ZodValidationPipe } from '../../pipes'
+import { AuditLogListResponseDto } from '../../dtos/response/audit-log'
+import { AuditLogErrorFilter } from '../../filters/audit-log-error.filter'
+
+export const listAuditLogsQuerySchema = z.object({
+  actorType: z.nativeEnum(ActorType),
+  actorEmail: z.string().email().optional(),
+  entity: z.string().optional(),
+  action: z.string().optional(),
+  entityId: z.string().optional(),
+  startDate: z.coerce.date().optional(),
+  endDate: z.coerce.date().optional(),
+  cursor: z.string().optional(),
+  limit: z.coerce.number().min(1).max(100).optional().default(20),
+})
+
+export type ListAuditLogsQuerySchema = z.infer<typeof listAuditLogsQuerySchema>
+
+@UseFilters(AuditLogErrorFilter)
+@ApiTags('Audit Logs')
+@ServiceTag('audit-log')
+@Controller({ path: 'audit-logs', version: '1' })
+export class ListAuditLogsController {
+  constructor(private listAuditLogsUseCase: ListAuditLogsUseCase) {}
+
+  @UseGuards(CaslAbilityGuard)
+  @CheckPolicies((ability) => ability.can('list', 'AuditLog'))
+  @Get()
+  @HttpCode(200)
+  @ApiOperation({ summary: 'List audit logs with filters and pagination' })
+  @ApiQuery({
+    name: 'actorType',
+    enum: ActorType,
+    required: true,
+    example: ActorType.USER,
+  })
+  @ApiQuery({
+    name: 'actorEmail',
+    required: false,
+    example: 'admin@empresa.com',
+  })
+  @ApiQuery({ name: 'entity', required: false, example: 'User' })
+  @ApiQuery({ name: 'action', required: false, example: 'update-password' })
+  @ApiQuery({ name: 'entityId', required: false, example: 'usr_1234567890' })
+  @ApiQuery({
+    name: 'startDate',
+    required: false,
+    example: '2024-06-01T00:00:00.000Z',
+  })
+  @ApiQuery({
+    name: 'endDate',
+    required: false,
+    example: '2024-06-30T23:59:59.000Z',
+  })
+  @ApiQuery({ name: 'cursor', required: false, example: 'log_abcdef123456' })
+  @ApiQuery({ name: 'limit', required: false, example: 20 })
+  @ApiOkResponse({ type: AuditLogListResponseDto })
+  @ApiUnauthorizedResponse({ description: 'Unauthorized.' })
+  @ApiForbiddenResponse({ description: 'Forbidden.' })
+  @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
+  @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
+  async handle(
+    @Query(new ZodValidationPipe(listAuditLogsQuerySchema))
+    query: ListAuditLogsQuerySchema,
+  ) {
+    const {
+      actorType,
+      actorEmail,
+      entity,
+      action,
+      entityId,
+      startDate,
+      endDate,
+      cursor,
+      limit,
+    } = query
+
+    const result = await this.listAuditLogsUseCase.execute({
+      params: {
+        actorType,
+        actorEmail,
+        entity,
+        action,
+        entityId,
+        startDate,
+        endDate,
+      },
+      cursorParams: {
+        cursor,
+        limit,
+      },
+    })
+
+    if (result.isRight()) {
+      const { data, meta } = result.value
+
+      return {
+        data: data.map(AuditLogPresenter.toHTTP),
+        meta,
+      }
+    }
+
+    throw result.value
+  }
+}
+</file>
+
+<file path="src/infra/http/dtos/response/audit-log/audit-log-list-response.dto.ts">
+import { ApiProperty } from '@nestjs/swagger'
+import { ActorType } from '@prisma/client'
+
+class AuditLogActorDto {
+  @ApiProperty({ example: 'usr_123456' })
+  id: string
+
+  @ApiProperty({ enum: ActorType, example: ActorType.USER })
+  type: ActorType
+
+  @ApiProperty({ example: 'João Silva' })
+  name: string
+
+  @ApiProperty({ example: 'joao@empresa.com' })
+  email: string
+}
+
+class AuditLogDto {
+  @ApiProperty({ example: 'log_abc123' })
+  id: string
+
+  @ApiProperty({ type: () => AuditLogActorDto })
+  actor: AuditLogActorDto
+
+  @ApiProperty({ example: 'edit' })
+  action: string
+
+  @ApiProperty({ example: 'User' })
+  entity: string
+
+  @ApiProperty({ example: 'usr_789456' })
+  entityId: string
+
+  @ApiProperty({
+    example: { name: ['João', 'João Silva'] },
+    nullable: true,
+  })
+  changes: Record<string, unknown> | null
+
+  @ApiProperty({ example: '2025-06-11T19:00:00.000Z' })
+  createdAt: Date
+}
+
+class PaginationMetaDto {
+  @ApiProperty({ example: 20 })
+  count: number
+
+  @ApiProperty({ example: true })
+  hasNextPage: boolean
+
+  @ApiProperty({ example: 'log_abcdef123456', nullable: true })
+  nextCursor?: string | null
+}
+
+export class AuditLogListResponseDto {
+  @ApiProperty({ type: () => [AuditLogDto] })
+  data: AuditLogDto[]
+
+  @ApiProperty({ type: () => PaginationMetaDto })
+  meta: PaginationMetaDto
+}
+</file>
+
+<file path="src/infra/http/dtos/response/audit-log/index.ts">
+export * from './audit-log-list-response.dto'
+</file>
+
+<file path="src/infra/http/filters/audit-log-error.filter.ts">
+import { Catch } from '@nestjs/common'
+import { AppErrorFilter } from './app-error.filter'
+
+@Catch()
+export class AuditLogErrorFilter extends AppErrorFilter {
+  protected override mapDomainErrorToStatus(name: string): number {
+    switch (name) {
+      default:
+        return super.mapDomainErrorToStatus(name)
+    }
+  }
+}
+</file>
+
+<file path="src/infra/http/presenters/audit-log.presenter.ts">
+import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
+import { ActorType } from '@prisma/client'
+
+type AuditLogWithActorInfo = AuditLog & {
+  actorName: string
+  actorEmail: string
+}
+
+export class AuditLogPresenter {
+  static toHTTP(auditLog: AuditLogWithActorInfo) {
+    return {
+      id: auditLog.id.toString(),
+      actor: {
+        id: auditLog.actorId,
+        type: auditLog.actorType as ActorType,
+        name: auditLog.actorName,
+        email: auditLog.actorEmail,
+      },
+      action: auditLog.action,
+      entity: auditLog.entity,
+      entityId: auditLog.entityId,
+      changes: auditLog.changes ?? null,
+      createdAt: auditLog.createdAt,
+    }
+  }
+}
 </file>
 
 <file path=".husky/pre-push">
@@ -1417,11 +1698,85 @@ export const right = <L, R>(value: R): Either<L, R> => {
 </file>
 
 <file path="src/domain/audit-log/application/repositories/audit-log-repository.ts">
-import { AuditLog } from '../../enterprise/entities/audit-log'
+import type { CursorPaginationParams } from '@/core/repositories/pagination-params'
+import { AuditLog, type ActorType } from '../../enterprise/entities/audit-log'
+
+export type ListAuditLogsFilters = {
+  actorType: ActorType
+  actorEmail?: string
+  actorId?: string
+  entity?: string
+  action?: string
+  entityId?: string
+  startDate?: Date
+  endDate?: Date
+}
 
 export abstract class AuditLogRepository {
   abstract create(auditLog: AuditLog): Promise<void>
+  abstract findMany(
+    filters: ListAuditLogsFilters,
+    pagination: CursorPaginationParams,
+  ): Promise<[AuditLog[], hasNextPage: boolean]>
+
+  abstract resolveActorIdByEmail(
+    actorType: ActorType,
+    email: string,
+  ): Promise<string | undefined>
 }
+</file>
+
+<file path="src/domain/audit-log/application/subscribers/user/__tests__/on-user-password-changed.spec.ts">
+import { vi } from 'vitest'
+import { waitFor } from 'test/utils/wait-for'
+import { OnUserPasswordChanged } from '@/domain/audit-log/application/subscribers/user/on-user-password-changed'
+import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
+import { makeUser } from 'test/factories/make-user'
+import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
+import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
+import { DomainEvents } from '@/core/events/domain-events'
+
+let inMemoryAuditLogRepository: InMemoryAuditLogRepository
+let inMemoryUsersRepository: InMemoryUsersRepository
+let createAuditLogUseCase: CreateAuditLogUseCase
+let createAuditLogSpy: ReturnType<typeof vi.spyOn>
+
+describe('On User Password Changed (subscriber)', () => {
+  beforeEach(() => {
+    inMemoryUsersRepository = new InMemoryUsersRepository()
+    inMemoryAuditLogRepository = new InMemoryAuditLogRepository()
+    createAuditLogUseCase = new CreateAuditLogUseCase(
+      inMemoryAuditLogRepository,
+    )
+    createAuditLogSpy = vi.spyOn(createAuditLogUseCase, 'execute')
+
+    new OnUserPasswordChanged(createAuditLogUseCase)
+  })
+
+  it('should create audit log when user password is changed', async () => {
+    const user = makeUser()
+
+    inMemoryUsersRepository.create(user)
+
+    user.updatePassword('new-password')
+
+    inMemoryUsersRepository.save(user)
+
+    DomainEvents.dispatchEventsForAggregate(user.id)
+
+    await waitFor(() => {
+      expect(createAuditLogSpy).toHaveBeenCalled()
+    })
+
+    expect(inMemoryAuditLogRepository.items).toHaveLength(1)
+    expect(inMemoryAuditLogRepository.items[0]).toEqual(
+      expect.objectContaining({
+        actorId: user.id.toString(),
+        action: 'user:password_changed',
+      }),
+    )
+  })
+})
 </file>
 
 <file path="src/domain/audit-log/application/subscribers/user/on-user-password-changed.ts">
@@ -1454,6 +1809,40 @@ export class OnUserPasswordChanged implements EventHandler {
     })
   }
 }
+</file>
+
+<file path="src/domain/audit-log/application/use-cases/__tests__/create-audit-log.spec.ts">
+import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
+import { beforeEach, describe, expect, it } from 'vitest'
+import { CreateAuditLogUseCase } from '../create-audit-log'
+
+let sut: CreateAuditLogUseCase
+let auditLogRepository: InMemoryAuditLogRepository
+
+describe('Create Audit Log Use Case', () => {
+  beforeEach(() => {
+    auditLogRepository = new InMemoryAuditLogRepository()
+    sut = new CreateAuditLogUseCase(auditLogRepository)
+  })
+
+  it('should create a new audit log entry', async () => {
+    const result = await sut.execute({
+      actorId: 'user-1',
+      actorType: 'USER',
+      action: 'user:password_changed',
+      entity: 'USER',
+      entityId: 'user-1',
+      changes: { passwordChanged: true },
+    })
+
+    expect(result.isRight()).toBe(true)
+    expect(auditLogRepository.items).toHaveLength(1)
+    expect(auditLogRepository.items[0].action).toBe('user:password_changed')
+    expect(auditLogRepository.items[0].changes).toEqual({
+      passwordChanged: true,
+    })
+  })
+})
 </file>
 
 <file path="src/domain/audit-log/application/use-cases/create-audit-log.ts">
@@ -2048,9 +2437,11 @@ export const userCanUpdateSelfHandler: PolicyHandler = (
 
 <file path="src/infra/auth/casl/models/avatar.ts">
 import { z } from 'zod'
+import { roleSchema } from '../roles'
 
 export const avatarSchema = z.object({
   sub: z.string(),
+  role: roleSchema,
   __typename: z.literal('Avatar').default('Avatar'),
 })
 
@@ -2195,10 +2586,30 @@ export class JwtVerifier implements TokenVerifier {
 </file>
 
 <file path="src/infra/database/prisma/mappers/audit-log/prisma-audit-log.mapper.ts">
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
-import { Prisma } from '@prisma/client'
+import { Prisma, AuditLog as PrismaAuditLog } from '@prisma/client'
 
 export class PrismaAuditLogMapper {
+  static toDomain(raw: PrismaAuditLog): AuditLog {
+    return AuditLog.create(
+      {
+        actorId: raw.actorId,
+        actorType: raw.actorType,
+        action: raw.action,
+        entity: raw.entity,
+        entityId: raw.entityId,
+        changes: raw.changes
+          ? typeof raw.changes === 'object'
+            ? raw.changes
+            : JSON.parse(raw.changes as string)
+          : null,
+        createdAt: raw.createdAt,
+      },
+      new UniqueEntityID(raw.id),
+    )
+  }
+
   static toPrisma(auditLog: AuditLog): Prisma.AuditLogCreateInput {
     return {
       id: auditLog.id.toString(),
@@ -2263,10 +2674,15 @@ export class AuditLogDatabaseModule {}
 
 <file path="src/infra/database/prisma/repositories/audit-log/prisma-audit-log.repository.ts">
 import { Injectable } from '@nestjs/common'
-import { AuditLogRepository } from '@/domain/audit-log/application/repositories/audit-log-repository'
+import {
+  AuditLogRepository,
+  ListAuditLogsFilters,
+} from '@/domain/audit-log/application/repositories/audit-log-repository'
 import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { PrismaAuditLogMapper } from '../../mappers/audit-log/prisma-audit-log.mapper'
+import { ActorType, type Prisma } from '@prisma/client'
+import type { CursorPaginationParams } from '@/core/repositories/pagination-params'
 
 @Injectable()
 export class PrismaAuditLogRepository implements AuditLogRepository {
@@ -2274,10 +2690,64 @@ export class PrismaAuditLogRepository implements AuditLogRepository {
 
   async create(auditLog: AuditLog): Promise<void> {
     const data = PrismaAuditLogMapper.toPrisma(auditLog)
+    await this.prisma.auditLog.create({ data })
+  }
 
-    await this.prisma.auditLog.create({
-      data,
+  async resolveActorIdByEmail(
+    actorType: ActorType,
+    email: string,
+  ): Promise<string | undefined> {
+    if (actorType === 'USER') {
+      const user = await this.prisma.user.findUnique({ where: { email } })
+      return user?.id
+    }
+
+    if (actorType === 'CLIENT') {
+      const client = await this.prisma.client.findUnique({ where: { email } })
+      return client?.id
+    }
+
+    return undefined
+  }
+
+  async findMany(
+    filters: ListAuditLogsFilters,
+    pagination: CursorPaginationParams,
+  ): Promise<[AuditLog[], boolean]> {
+    const { actorType, actorId, entity, action, entityId, startDate, endDate } =
+      filters
+
+    const { cursor, limit } = pagination
+
+    const createdAtRange: { gte?: Date; lte?: Date } = {}
+    if (startDate) createdAtRange.gte = startDate
+    if (endDate) createdAtRange.lte = endDate
+
+    const where: Prisma.AuditLogWhereInput = {
+      actorType,
+      ...(actorId ? { actorId } : {}),
+      ...(entity ? { entity } : {}),
+      ...(action ? { action } : {}),
+      ...(entityId ? { entityId } : {}),
+      ...(startDate || endDate ? { createdAt: createdAtRange } : {}),
+    }
+
+    const results = await this.prisma.auditLog.findMany({
+      where,
+      take: limit + 1,
+      orderBy: { createdAt: 'desc' },
+      ...(cursor
+        ? {
+            skip: 1,
+            cursor: { id: cursor },
+          }
+        : {}),
     })
+
+    const hasNextPage = results.length > limit
+    const items = hasNextPage ? results.slice(0, -1) : results
+
+    return [items.map(PrismaAuditLogMapper.toDomain), hasNextPage]
   }
 }
 </file>
@@ -2410,6 +2880,85 @@ export class EnvService {
     return this.configService.get(key, { infer: true })
   }
 }
+</file>
+
+<file path="src/infra/events/user/__tests__/on-user-password-changed.e2e-spec.ts">
+import { DomainEvents } from '@/core/events/domain-events'
+import { AppModule } from '@/infra/app.module'
+import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
+import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { TokenService } from '@/infra/auth/token.service'
+import { INestApplication, VersioningType } from '@nestjs/common'
+import { Test } from '@nestjs/testing'
+import { UserFactory } from 'test/factories/make-user'
+import { randomUUID } from 'crypto'
+import request from 'supertest'
+import { hash } from 'bcryptjs'
+import { waitFor } from 'test/utils/wait-for'
+
+describe('On user password changed (E2E)', () => {
+  let app: INestApplication
+  let prisma: PrismaService
+  let userFactory: UserFactory
+  let tokenService: TokenService
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      imports: [AppModule, UserDatabaseModule, CryptographyModule],
+      providers: [UserFactory, TokenService],
+    }).compile()
+
+    app = moduleRef.createNestApplication()
+    app.enableVersioning({ type: VersioningType.URI })
+
+    prisma = moduleRef.get(PrismaService)
+    userFactory = moduleRef.get(UserFactory)
+    tokenService = moduleRef.get(TokenService)
+
+    DomainEvents.shouldRun = true
+
+    await app.init()
+  })
+
+  afterAll(async () => {
+    await app.close()
+  })
+
+  it('should create audit log when user changes password', async () => {
+    const password = '123456'
+    const user = await userFactory.makePrismaUser({
+      passwordHash: await hash(password, 8),
+    })
+
+    const token = await tokenService.generate({
+      sub: user.id.toString(),
+      role: user.role,
+      jti: randomUUID(),
+    })
+
+    await request(app.getHttpServer())
+      .patch(`/v1/users/${user.id.toString()}/password`)
+      .set('Authorization', `Bearer ${token}`)
+      .send({
+        currentPassword: password,
+        newPassword: 'new-password',
+      })
+      .expect(204)
+
+    await waitFor(async () => {
+      const auditLog = await prisma.auditLog.findFirst({
+        where: {
+          actorId: user.id.toString(),
+          action: 'user:password_changed',
+        },
+      })
+
+      expect(auditLog).not.toBeNull()
+      expect(auditLog?.changes).toContain('passwordChanged')
+    })
+  })
+})
 </file>
 
 <file path="src/infra/events/user/user-events.module.ts">
@@ -4384,14 +4933,61 @@ export class FakeMailer implements MailRepository {
 </file>
 
 <file path="test/repositories/audit-log/in-memory-audit-log.repository.ts">
-import { AuditLogRepository } from '@/domain/audit-log/application/repositories/audit-log-repository'
+import {
+  AuditLogRepository,
+  ListAuditLogsFilters,
+} from '@/domain/audit-log/application/repositories/audit-log-repository'
 import { AuditLog } from '@/domain/audit-log/enterprise/entities/audit-log'
+import type { CursorPaginationParams } from '@/core/repositories/pagination-params'
 
 export class InMemoryAuditLogRepository implements AuditLogRepository {
   public items: AuditLog[] = []
 
   async create(auditLog: AuditLog): Promise<void> {
     this.items.push(auditLog)
+  }
+
+  async resolveActorIdByEmail(): Promise<string | undefined> {
+    return 'fake-id' // para testes
+  }
+
+  async findMany(
+    {
+      actorType,
+      actorId,
+      entity,
+      action,
+      entityId,
+      startDate,
+      endDate,
+    }: ListAuditLogsFilters,
+    { cursor, limit }: CursorPaginationParams,
+  ): Promise<[AuditLog[], boolean]> {
+    let results = this.items.filter((item) => {
+      return (
+        item.actorType === actorType &&
+        (!actorId || item.actorId === actorId) &&
+        (!entity || item.entity === entity) &&
+        (!action || item.action === action) &&
+        (!entityId || item.entityId === entityId) &&
+        (!startDate || item.createdAt >= startDate) &&
+        (!endDate || item.createdAt <= endDate)
+      )
+    })
+
+    results.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+
+    if (cursor) {
+      const index = results.findIndex((item) => item.id.toString() === cursor)
+      if (index >= 0) {
+        results = results.slice(index + 1)
+      }
+    }
+
+    const paginated = results.slice(0, limit)
+    const hasNextPage = results.length > limit
+
+    return [paginated, hasNextPage]
   }
 }
 </file>
@@ -4901,6 +5497,17 @@ export interface PaginationMeta {
   nextPage: number | null
   previousPage: number | null
 }
+
+export type CursorPaginationParams = {
+  cursor?: string
+  limit: number
+}
+
+export type CursorPaginationMeta = {
+  count: number
+  hasNextPage: boolean
+  nextCursor?: string | null
+}
 </file>
 
 <file path="src/domain/user/application/repositories/user-address-repository.ts">
@@ -4927,6 +5534,7 @@ import { User } from '../../enterprise/entities/user'
 
 export abstract class UsersRepository {
   abstract findById(id: string): Promise<User | null>
+  abstract findManyByIds(ids: string[]): Promise<User[]>
   abstract findByEmail(email: string): Promise<User | null>
   abstract list(params: PaginationParams): Promise<[User[], number]>
   abstract save(user: User): Promise<void>
@@ -5725,10 +6333,12 @@ import { userSubject } from './subjects/user'
 import { permissions } from './permissions'
 import type { User } from './models/user'
 import { avatarSubject } from './subjects/avatar'
+import { auditLogSubject } from './subjects/audit-log'
 
 export const appAbilitiesSchema = z.union([
   userSubject,
   avatarSubject,
+  auditLogSubject,
   z.tuple([z.literal('manage'), z.literal('all')]),
 ])
 type AppAbilities = z.infer<typeof appAbilitiesSchema>
@@ -6941,6 +7551,11 @@ export class InMemoryUsersRepository implements UsersRepository {
     const user = this.items.find((item) => item.id.toString() === id)
 
     return user || null
+  }
+
+  async findManyByIds(ids: string[]): Promise<User[]> {
+    const idSet = new Set(ids)
+    return this.items.filter((user) => idSet.has(user.id.toString()))
   }
 
   async findByEmail(email: string) {
@@ -8530,11 +9145,14 @@ import { CacheModule } from '../cache/cache.module'
 import { StorageModule } from '../storage/storage.module'
 import { MailHealthIndicator } from './indicators/mailer-health.indicator'
 import { MailerModule } from '../mail/mailer.module'
+import { AuditLogControllersModule } from './controllers/audit-log/audit-log-controllers.module'
 
 @Module({
   imports: [
     UserControllersModule,
     AvatarControllersModule,
+    AuditLogControllersModule,
+
     TerminusModule,
     PrismaModule,
     CacheModule,
@@ -10400,6 +11018,19 @@ export class PrismaUsersRepository implements UsersRepository {
     await this.cache.set(`user:${id}:details`, JSON.stringify(user))
 
     return PrismaUserMapper.toDomain(user)
+  }
+
+  async findManyByIds(ids: string[]): Promise<User[]> {
+    const users = await this.prisma.user.findMany({
+      where: {
+        id: { in: ids },
+      },
+      include: {
+        addresses: true,
+      },
+    })
+
+    return users.map(PrismaUserMapper.toDomain)
   }
 
   async findByEmail(email: string): Promise<User | null> {
