@@ -61,6 +61,8 @@ model Address {
 
   user   User?   @relation(fields: [userId], references: [id])
   client Client? @relation(fields: [clientId], references: [id])
+
+  @@map("address")
 }
 
 model Client {
@@ -75,4 +77,26 @@ model Client {
 
   addresses Address[]
   avatar    Avatar?   @relation(fields: [avatarId], references: [id])
+
+  @@map("clients")
+}
+
+enum ActorType {
+  USER
+  CLIENT
+}
+
+model AuditLog {
+  id        String    @id @default(uuid())
+  actorId   String    @map("actor_id")
+  actorType ActorType @map("actor_type")
+  action    String
+  entity    String
+  entityId  String    @map("entity_id")
+  changes   Json?
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([actorId])
+  @@index([entity, entityId])
+  @@map("audit_logs")
 }

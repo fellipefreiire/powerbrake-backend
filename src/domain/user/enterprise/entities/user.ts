@@ -3,6 +3,7 @@ import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { Optional } from '@/core/types/optional'
 import type { Role } from '@prisma/client'
 import { UserAddressList } from './user-address-list'
+import { UserPasswordChangedEvent } from '../events/user-password-changed-event'
 
 export interface UserProps {
   name: string
@@ -79,6 +80,8 @@ export class User extends AggregateRoot<UserProps> {
   }
 
   updatePassword(hash: string) {
+    this.addDomainEvent(new UserPasswordChangedEvent(this))
+
     this.props.passwordHash = hash
     this.touch()
   }

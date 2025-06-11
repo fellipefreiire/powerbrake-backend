@@ -7,6 +7,7 @@ import { EnvModule } from './env/env.module'
 import { LoggerModule } from './logger/logger.module'
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler'
 import { APP_GUARD } from '@nestjs/core'
+import { EventsModule } from './events/events.module'
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { APP_GUARD } from '@nestjs/core'
     AuthModule,
     HttpModule,
     EnvModule,
+    EventsModule,
   ],
   providers: [
     {
