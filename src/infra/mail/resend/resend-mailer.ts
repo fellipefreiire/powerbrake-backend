@@ -18,7 +18,7 @@ export class ResendMailer implements MailRepository {
 
   async send(params: SendEmailParams): Promise<void> {
     await this.client.emails.send({
-      from: 'no-reply@yourdomain.com',
+      from: 'onboarding@resend.dev',
       to: params.to,
       subject: params.subject,
       html: params.html,

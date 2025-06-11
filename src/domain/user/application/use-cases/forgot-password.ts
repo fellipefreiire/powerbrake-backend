@@ -29,7 +29,7 @@ export class ForgotPasswordUseCase {
       return right(null)
     }
 
-    const token = await this.encrypter.encrypt({ sub: user.id })
+    const token = await this.encrypter.encrypt({ sub: user.id.toString() })
 
     const url = `${resetPasswordUrl}?token=${token}`
 
