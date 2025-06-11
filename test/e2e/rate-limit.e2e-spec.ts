@@ -23,14 +23,17 @@ describe('Rate Limit (E2E)', () => {
   it('should return 429 after too many requests', async () => {
     const server = app.getHttpServer()
 
-    let lastResponse
+    const ip = '127.0.0.77' // usar IP único para isolar o teste
 
-    for (let i = 0; i < 11; i++) {
-      lastResponse = await request(server)
-        .get('/health')
-        .set('X-Forwarded-For', '127.0.0.1')
-    }
+    const results = await Promise.all(
+      Array.from({ length: 11 }).map(() =>
+        request(server).get('/health').set('X-Forwarded-For', ip),
+      ),
+    )
 
-    expect(lastResponse.statusCode).toBe(429)
-  }, 10000)
+    const statusCodes = results.map((res) => res.statusCode)
+
+    // Deve haver pelo menos um 429
+    expect(statusCodes).toContain(429)
+  }, 5000)
 })
