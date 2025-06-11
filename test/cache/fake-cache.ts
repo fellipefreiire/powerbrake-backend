@@ -34,13 +34,10 @@ export class FakeCacheService implements CacheRepository {
   }
 
   async keys(pattern: string): Promise<string[]> {
-    const regex = new RegExp(
-      '^' +
-        pattern
-          .replace(/\*/g, '.*')
-          .replace(/[-[\]{}()+?.,\\^$|#\s]/g, '\\$&') +
-        '$',
-    )
+    // Escape antes e depois substitui * por .*
+    const escaped = pattern.replace(/[-[\]{}()+?.,\\^$|#\s]/g, '\\$&')
+    const regex = new RegExp('^' + escaped.replace(/\*/g, '.*') + '$')
+
     return Array.from(this.store.keys()).filter((key) => regex.test(key))
   }
 }

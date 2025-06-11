@@ -2,6 +2,7 @@ export abstract class TokenRepository {
   abstract generateAccessToken(payload: {
     sub: string
     role: string
+    jti: string
   }): Promise<{
     token: string
     expiresIn: number

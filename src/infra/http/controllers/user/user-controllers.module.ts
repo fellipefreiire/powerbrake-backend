@@ -28,6 +28,8 @@ import { ResetPasswordUseCase } from '@/domain/user/application/use-cases/reset-
 import { ForgotPasswordController } from './forgot-password.controller'
 import { ForgotPasswordUseCase } from '@/domain/user/application/use-cases/forgot-password'
 import { EnvModule } from '@/infra/env/env.module'
+import { EditUserPasswordController } from './edit-user-password.controller'
+import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edit-user-password'
 
 @Module({
   imports: [
@@ -51,6 +53,7 @@ import { EnvModule } from '@/infra/env/env.module'
     LogoutUserController,
     ResetPasswordController,
     ForgotPasswordController,
+    EditUserPasswordController,
   ],
   providers: [
     AuthenticateUserUseCase,
@@ -64,6 +67,7 @@ import { EnvModule } from '@/infra/env/env.module'
     LogoutUserUseCase,
     ResetPasswordUseCase,
     ForgotPasswordUseCase,
+    EditUserPasswordUseCase,
   ],
 })
 export class UserControllersModule {}

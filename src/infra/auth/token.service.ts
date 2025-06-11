@@ -6,7 +6,11 @@ import { TokenRepository } from './token-repository'
 export class TokenService implements TokenRepository {
   constructor(private encrypter: Encrypter) {}
 
-  async generateAccessToken(payload: { sub: string; role: string }) {
+  async generateAccessToken(payload: {
+    sub: string
+    role: string
+    jti: string
+  }) {
     const now = Math.floor(Date.now() / 1000)
     const exp = now + 60 * 60 // 1 hour
 

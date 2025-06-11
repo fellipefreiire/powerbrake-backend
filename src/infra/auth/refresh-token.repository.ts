@@ -3,4 +3,8 @@ export abstract class RefreshTokenRepository {
   abstract validate(jti: string): Promise<boolean>
   abstract revoke(jti: string): Promise<void>
   abstract revokeAllForUser(userId: string): Promise<void>
+  abstract revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void>
 }

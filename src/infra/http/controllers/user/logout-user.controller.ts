@@ -9,7 +9,6 @@ import { LogoutUserUseCase } from '@/domain/user/application/use-cases/logout-us
 import { CurrentUser } from '@/infra/auth/current-user.decorator'
 import { JwtAuthGuard } from '@/infra/auth/jwt-auth.guard'
 import { UserErrorFilter } from '../../filters/user-error.filter'
-import type { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
 import {
   ApiInternalServerErrorResponse,
   ApiNoContentResponse,
@@ -20,6 +19,7 @@ import {
 import { InternalServerErrorDto } from '../../dtos/error/generic'
 import { UserUnauthorizedDto } from '../../dtos/error/user'
 import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
 
 @UseFilters(UserErrorFilter)
 @ApiTags('Users')
@@ -42,7 +42,7 @@ export class LogoutUserController {
     description: 'Unexpected error',
     type: InternalServerErrorDto,
   })
-  async handle(@CurrentUser() user: RefreshTokenPayload) {
+  async handle(@CurrentUser() user: UserPayload) {
     const result = await this.logoutUserUseCase.execute({ jti: user.jti })
 
     if (result.isLeft()) throw result.value

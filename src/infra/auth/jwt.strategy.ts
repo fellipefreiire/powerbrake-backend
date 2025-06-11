@@ -10,18 +10,10 @@ const tokenPayloadSchema = z.object({
   role: roleSchema,
   iat: z.number(),
   exp: z.number(),
-})
-
-export const refreshTokenPayloadSchema = z.object({
-  sub: z.string().uuid(),
-  role: roleSchema,
-  iat: z.number(),
-  exp: z.number(),
   jti: z.string().uuid(),
 })
 
 export type UserPayload = z.infer<typeof tokenPayloadSchema>
-export type RefreshTokenPayload = z.infer<typeof refreshTokenPayloadSchema>
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -35,11 +27,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     })
   }
 
-  async validate(payload: UserPayload | RefreshTokenPayload) {
-    if (typeof payload === 'object' && payload !== null && 'jti' in payload) {
-      return refreshTokenPayloadSchema.parse(payload)
-    }
-
+  async validate(payload: UserPayload) {
     return tokenPayloadSchema.parse(payload)
   }
 }

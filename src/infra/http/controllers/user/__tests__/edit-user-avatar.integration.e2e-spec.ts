@@ -7,6 +7,7 @@ import { UserFactory } from 'test/factories/make-user'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 describe('Edit User Avatar (E2E)', () => {
   let app: INestApplication
@@ -47,6 +48,7 @@ describe('Edit User Avatar (E2E)', () => {
     const accessToken = await token.generateAccessToken({
       sub: user.id.toString(),
       role: user.role,
+      jti: randomUUID(),
     })
 
     const avatarUploadRes = await request(app.getHttpServer())

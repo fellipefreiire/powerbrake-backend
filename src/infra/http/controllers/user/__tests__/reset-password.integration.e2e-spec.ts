@@ -55,7 +55,7 @@ describe('Reset Password Flow (Integration)', () => {
     mailer.sent.length = 0
   })
 
-  it('should reset the password successfully', async () => {
+  it('[INTEGRATION] → should reset the password successfully', async () => {
     const user: User = await userFactory.makePrismaUser({
       email: 'example@email.com',
       passwordHash: 'old-password',

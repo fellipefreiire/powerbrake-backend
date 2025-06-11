@@ -10,6 +10,7 @@ import { Uploader } from '@/shared/storage/uploader'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 describe('Upload Avatar (E2E)', () => {
   let app: INestApplication
@@ -64,6 +65,7 @@ describe('Upload Avatar (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
   })
 

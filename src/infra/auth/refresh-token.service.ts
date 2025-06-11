@@ -44,4 +44,26 @@ export class RefreshTokenService implements RefreshTokenRepository {
   private key(jti: string): string {
     return `refresh_token:${jti}`
   }
+
+  async revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void> {
+    const keys = await this.cache.keys('refresh_token:*')
+
+    const tokens = await Promise.all(
+      keys.map(async (key) => {
+        const uid = await this.cache.get(key)
+        return { key, uid }
+      }),
+    )
+
+    const keysToDelete = tokens
+      .filter((t) => t.uid === userId && t.key !== this.key(exceptJti))
+      .map((t) => t.key)
+
+    if (keysToDelete.length > 0) {
+      await this.cache.del(keysToDelete)
+    }
+  }
 }

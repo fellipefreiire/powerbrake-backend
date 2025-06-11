@@ -40,9 +40,27 @@ export class FakeRefreshTokenService implements RefreshTokenRepository {
     return `refresh_token:${jti}`
   }
 
-  // método auxiliar exclusivo para testes
   async isRevoked(jti: string): Promise<boolean> {
     const result = await this.cache.get(this.key(jti))
     return result === null
+  }
+
+  async revokeAllForUserExcept(
+    userId: string,
+    exceptJti: string,
+  ): Promise<void> {
+    const keys = await this.cache.keys('refresh_token:*')
+
+    const deletable: string[] = []
+    for (const key of keys) {
+      const uid = await this.cache.get(key)
+      if (uid === userId && key !== this.key(exceptJti)) {
+        deletable.push(key)
+      }
+    }
+
+    if (deletable.length > 0) {
+      await this.cache.del(deletable)
+    }
   }
 }

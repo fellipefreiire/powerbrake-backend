@@ -8,6 +8,7 @@ import type { User } from '@/domain/user/enterprise/entities/user'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 describe('Edit User (E2E)', () => {
   let app: INestApplication
@@ -55,6 +56,7 @@ describe('Edit User (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
   })
 

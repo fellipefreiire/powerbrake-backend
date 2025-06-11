@@ -2,9 +2,9 @@ import { left, right, type Either } from '@/core/either'
 import { Injectable } from '@nestjs/common'
 import { JwtService } from '@nestjs/jwt'
 import { UserUnauthorizedError } from './errors/user-unauthorized-error'
-import { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
 import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
 import { TokenRepository } from '@/infra/auth/token-repository'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
 
 type RefreshUserTokenUseCaseRequest = {
   refreshToken: string
@@ -40,7 +40,7 @@ export class RefreshUserTokenUseCase {
       return left(new UserUnauthorizedError())
     }
 
-    let payload: RefreshTokenPayload
+    let payload: UserPayload
 
     try {
       payload = this.jwtService.verify(refreshToken)
@@ -54,9 +54,12 @@ export class RefreshUserTokenUseCase {
       return left(new UserUnauthorizedError())
     }
 
+    const jti = await this.refreshTokenRepository.create(payload.sub)
+
     const accessToken = await this.tokenRepository.generateAccessToken({
       sub: payload.sub,
       role: payload.role,
+      jti,
     })
 
     return right({

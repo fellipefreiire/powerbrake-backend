@@ -63,6 +63,7 @@ describe('Find User By Id (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -73,6 +74,7 @@ describe('Find User By Id (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
 
     targetUser = await userFactory.makePrismaUser({

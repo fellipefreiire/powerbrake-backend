@@ -31,20 +31,28 @@ describe('Edit User Password', () => {
     )
   })
 
-  it('should edit password when current password is valid', async () => {
+  it('should update the password and revoke other sessions', async () => {
     const user = makeUser({
-      passwordHash: await hashGenerator.hash('correct-password'),
+      passwordHash: await hashGenerator.hash('old-pass'),
     })
     await usersRepository.create(user)
 
     const result = await sut.execute({
       userId: user.id.toString(),
-      currentPassword: 'correct-password',
-      newPassword: 'new-password',
+      currentPassword: 'old-pass',
+      newPassword: 'new-pass',
+      currentJti: 'current-jti',
     })
 
     expect(result.isRight()).toBe(true)
-    expect(user.passwordHash).toBe('new-password-hashed')
+
+    const updated = await usersRepository.findById(user.id.toString())
+    const passwordMatch = await hashComparer.compare(
+      'new-pass',
+      updated!.passwordHash,
+    )
+
+    expect(passwordMatch).toBe(true)
   })
 
   it('should return UserNotFoundError if user does not exist', async () => {
@@ -52,6 +60,7 @@ describe('Edit User Password', () => {
       userId: 'non-existent-id',
       currentPassword: 'any-password',
       newPassword: 'new-password',
+      currentJti: 'current-jti',
     })
 
     expect(result.isLeft()).toBe(true)
@@ -59,7 +68,9 @@ describe('Edit User Password', () => {
   })
 
   it('should return UserUnauthorizedError if current password is invalid', async () => {
-    const user = makeUser({ passwordHash: 'correct-hash' })
+    const user = makeUser({
+      passwordHash: await hashGenerator.hash('correct-password'),
+    })
     await usersRepository.create(user)
 
     hashComparer.compare = vi.fn().mockResolvedValue(false)
@@ -68,9 +79,35 @@ describe('Edit User Password', () => {
       userId: user.id.toString(),
       currentPassword: 'wrong-password',
       newPassword: 'new-password',
+      currentJti: 'current-jti',
     })
 
     expect(result.isLeft()).toBe(true)
     expect(result.value).toBeInstanceOf(UserUnauthorizedError)
+  })
+
+  it('should revoke all other sessions except current', async () => {
+    const user = makeUser({
+      passwordHash: await hashGenerator.hash('old-pass'),
+    })
+    await usersRepository.create(user)
+
+    await fakeCacheService.set('refresh_token:abc', user.id.toString())
+    await fakeCacheService.set('refresh_token:def', user.id.toString())
+    await fakeCacheService.set('refresh_token:ghi', 'another-user-id')
+
+    const result = await sut.execute({
+      userId: user.id.toString(),
+      currentPassword: 'old-pass',
+      newPassword: 'new-pass',
+      currentJti: 'def',
+    })
+
+    expect(result.isRight()).toBe(true)
+
+    const remainingKeys = await fakeCacheService.keys('refresh_token:*')
+    expect(remainingKeys).toContain('refresh_token:def')
+    expect(remainingKeys).not.toContain('refresh_token:abc')
+    expect(remainingKeys).toContain('refresh_token:ghi')
   })
 })

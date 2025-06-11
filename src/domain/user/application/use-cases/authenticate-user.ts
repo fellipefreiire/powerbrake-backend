@@ -58,13 +58,13 @@ export class AuthenticateUserUseCase {
     if (!isPasswordValid) {
       return left(new WrongCredentialsError())
     }
+    const jti = await this.refreshTokenRepository.create(user.id.toString())
 
     const accessToken = await this.tokenRepository.generateAccessToken({
       sub: user.id.toString(),
       role: user.role,
+      jti,
     })
-
-    const jti = await this.refreshTokenRepository.create(user.id.toString())
 
     const refreshToken = await this.tokenRepository.generateRefreshToken({
       sub: user.id.toString(),

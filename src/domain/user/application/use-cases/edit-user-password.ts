@@ -5,11 +5,13 @@ import { UsersRepository } from '../repositories/user-repository'
 import { HashComparer } from '@/shared/cryptography/hash-comparer'
 import { HashGenerator } from '@/shared/cryptography/hash-generator'
 import { RefreshTokenRepository } from '@/infra/auth/refresh-token.repository'
+import { Injectable } from '@nestjs/common'
 
 interface EditUserPasswordUseCaseRequest {
   userId: string
   currentPassword: string
   newPassword: string
+  currentJti: string
 }
 
 type EditUserPasswordUseCaseResponse = Either<
@@ -17,6 +19,7 @@ type EditUserPasswordUseCaseResponse = Either<
   void
 >
 
+@Injectable()
 export class EditUserPasswordUseCase {
   constructor(
     private usersRepository: UsersRepository,
@@ -29,6 +32,7 @@ export class EditUserPasswordUseCase {
     userId,
     currentPassword,
     newPassword,
+    currentJti,
   }: EditUserPasswordUseCaseRequest): Promise<EditUserPasswordUseCaseResponse> {
     const user = await this.usersRepository.findById(userId)
 
@@ -49,7 +53,8 @@ export class EditUserPasswordUseCase {
     user.updatePassword(newPasswordHash)
 
     await this.usersRepository.save(user)
-    await this.refreshTokenRepository.revokeAllForUser(user.id.toString())
+
+    await this.refreshTokenRepository.revokeAllForUserExcept(userId, currentJti)
 
     return right(undefined)
   }

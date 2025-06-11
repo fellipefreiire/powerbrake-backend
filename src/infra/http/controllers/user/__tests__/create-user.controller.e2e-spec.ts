@@ -8,6 +8,7 @@ import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/us
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { randomUUID } from 'node:crypto'
 
 const createUserEndpoint = '/v1/users'
 
@@ -62,6 +63,7 @@ describe('Create User (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -72,6 +74,7 @@ describe('Create User (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
   })
 

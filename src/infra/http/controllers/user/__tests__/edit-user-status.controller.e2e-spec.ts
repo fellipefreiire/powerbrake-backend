@@ -67,6 +67,7 @@ describe('Edit User Status (E2E)', () => {
     adminAccessToken = await token.generateAccessToken({
       sub: adminUser.id.toString(),
       role: adminUser.role,
+      jti: randomUUID(),
     })
 
     managerUser = await userFactory.makePrismaUser({
@@ -77,6 +78,7 @@ describe('Edit User Status (E2E)', () => {
     managerAccessToken = await token.generateAccessToken({
       sub: managerUser.id.toString(),
       role: managerUser.role,
+      jti: randomUUID(),
     })
 
     operatorUser = await userFactory.makePrismaUser({
@@ -87,6 +89,7 @@ describe('Edit User Status (E2E)', () => {
     operatorAccessToken = await token.generateAccessToken({
       sub: operatorUser.id.toString(),
       role: operatorUser.role,
+      jti: randomUUID(),
     })
 
     targetUser = await userFactory.makePrismaUser({
