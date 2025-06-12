@@ -1,3 +1,4 @@
+import { DomainEvents } from '@/core/events/domain-events'
 import type { PaginationParams } from '@/core/repositories/pagination-params'
 import type { UsersRepository } from '@/domain/user/application/repositories/user-repository'
 import type { User } from '@/domain/user/enterprise/entities/user'
@@ -36,6 +37,8 @@ export class InMemoryUsersRepository implements UsersRepository {
 
   async create(user: User) {
     this.items.push(user)
+
+    DomainEvents.dispatchEventsForAggregate(user.id)
   }
 
   async save(user: User) {

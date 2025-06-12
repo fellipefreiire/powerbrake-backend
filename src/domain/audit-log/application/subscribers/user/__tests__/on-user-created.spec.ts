@@ -1,18 +1,19 @@
 import { vi } from 'vitest'
 import { waitFor } from 'test/utils/wait-for'
-import { OnUserPasswordChanged } from '@/domain/audit-log/application/subscribers/user/on-user-password-changed'
-import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
 import { makeUser } from 'test/factories/make-user'
-import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
-import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
 import { DomainEvents } from '@/core/events/domain-events'
+import { OnUserCreated } from '@/domain/audit-log/application/subscribers/user/on-user-created'
+import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
+import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
+import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 
-let inMemoryAuditLogRepository: InMemoryAuditLogRepository
 let inMemoryUsersRepository: InMemoryUsersRepository
+let inMemoryAuditLogRepository: InMemoryAuditLogRepository
 let createAuditLogUseCase: CreateAuditLogUseCase
 let createAuditLogSpy: ReturnType<typeof vi.spyOn>
 
-describe('On User Password Changed (subscriber)', () => {
+describe('On User Created (subscriber)', () => {
   beforeEach(() => {
     inMemoryUsersRepository = new InMemoryUsersRepository()
     inMemoryAuditLogRepository = new InMemoryAuditLogRepository(
@@ -23,17 +24,21 @@ describe('On User Password Changed (subscriber)', () => {
     )
     createAuditLogSpy = vi.spyOn(createAuditLogUseCase, 'execute')
 
-    new OnUserPasswordChanged(createAuditLogUseCase)
+    new OnUserCreated(createAuditLogUseCase)
   })
 
-  it('should create audit log when user password is changed', async () => {
-    const user = makeUser()
+  it('should create audit log when user is created', async () => {
+    const user = makeUser(
+      {
+        name: 'John Doe',
+        email: 'john@example.com',
+        role: 'MANAGER',
+      },
+      undefined,
+      new UniqueEntityID('creator-id'),
+    )
 
     inMemoryUsersRepository.create(user)
-
-    user.updatePassword('new-password')
-
-    inMemoryUsersRepository.save(user)
 
     DomainEvents.dispatchEventsForAggregate(user.id)
 
@@ -44,8 +49,9 @@ describe('On User Password Changed (subscriber)', () => {
     expect(inMemoryAuditLogRepository.items).toHaveLength(1)
     expect(inMemoryAuditLogRepository.items[0]).toEqual(
       expect.objectContaining({
-        actorId: user.id.toString(),
-        action: 'user:password_changed',
+        actorId: 'creator-id',
+        action: 'user:created',
+        entityId: user.id.toString(),
       }),
     )
   })

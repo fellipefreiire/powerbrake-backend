@@ -125,6 +125,7 @@ export class PrismaUsersRepository implements UsersRepository {
       }),
       this.cache.del('users'),
     ])
+    DomainEvents.dispatchEventsForAggregate(user.id)
   }
 
   async delete(user: User): Promise<void> {

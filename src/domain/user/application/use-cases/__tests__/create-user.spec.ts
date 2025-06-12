@@ -26,7 +26,12 @@ describe('Create User', () => {
   })
 
   it('should be able to create a new user', async () => {
+    const adminUser = makeUser({
+      role: 'ADMIN',
+    })
+
     const result = await sut.execute({
+      actorId: adminUser.id.toString(),
       name: 'John Doe',
       email: 'johndoe@example.com',
       password: '123456',
@@ -63,7 +68,12 @@ describe('Create User', () => {
   })
 
   it('should hash user password upon registration', async () => {
+    const adminUser = makeUser({
+      role: 'ADMIN',
+    })
+
     const result = await sut.execute({
+      actorId: adminUser.id.toString(),
       name: 'John Doe',
       email: 'johndoe@example.com',
       password: '123456',
@@ -95,6 +105,10 @@ describe('Create User', () => {
   })
 
   it('should not be able to create a new user with already existing email', async () => {
+    const adminUser = makeUser({
+      role: 'ADMIN',
+    })
+
     const alreadyExistingUser = makeUser(
       {
         email: 'johndoe@example.com',
@@ -105,6 +119,7 @@ describe('Create User', () => {
     await inMemoryUsersRepository.create(alreadyExistingUser)
 
     const result = await sut.execute({
+      actorId: adminUser.id.toString(),
       name: 'John Doe',
       email: 'johndoe@example.com',
       password: '123456',

@@ -8,8 +8,11 @@ import type { Role } from '@prisma/client'
 import { Address } from '@/shared/address/enterprise/entities/address'
 import { UserAddressRepository } from '../repositories/user-address-repository'
 import { UserAddressList } from '../../enterprise/entities/user-address-list'
+import { UserUnauthorizedError } from './errors/user-unauthorized-error'
+import { UniqueEntityID } from '@/core/entities/unique-entity-id'
 
 interface CreateUserUseCaseRequest {
+  actorId: string
   name: string
   email: string
   password: string
@@ -26,7 +29,7 @@ interface CreateUserUseCaseRequest {
 }
 
 type CreateUserUseCaseResponse = Either<
-  UserAlreadyExistsError,
+  UserAlreadyExistsError | UserUnauthorizedError,
   {
     data: User
   }
@@ -41,12 +44,17 @@ export class CreateUserUseCase {
   ) {}
 
   async execute({
+    actorId,
     name,
     email,
     password,
     role,
     addresses,
   }: CreateUserUseCaseRequest): Promise<CreateUserUseCaseResponse> {
+    if (!actorId) {
+      return left(new UserUnauthorizedError())
+    }
+
     const userAlreadyExists = await this.usersRepository.findByEmail(email)
 
     if (userAlreadyExists) {
@@ -55,13 +63,17 @@ export class CreateUserUseCase {
 
     const passwordHash = await this.hashGenerator.hash(password)
 
-    const user = User.create({
-      email,
-      isActive: true,
-      name,
-      passwordHash,
-      role,
-    })
+    const user = User.create(
+      {
+        email,
+        isActive: true,
+        name,
+        passwordHash,
+        role,
+      },
+      undefined,
+      new UniqueEntityID(actorId),
+    )
 
     const addressList = new UserAddressList(
       addresses.map((a) =>

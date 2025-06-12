@@ -12,6 +12,7 @@ export function makeUser(
     addresses?: Address[]
   } = {},
   id?: UniqueEntityID,
+  actorId?: UniqueEntityID,
 ) {
   const { addresses, ...rest } = override
 
@@ -30,6 +31,7 @@ export function makeUser(
       ...rest,
     },
     id,
+    actorId,
   )
 
   return user

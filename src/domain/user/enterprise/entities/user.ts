@@ -4,6 +4,7 @@ import type { Optional } from '@/core/types/optional'
 import type { Role } from '@prisma/client'
 import { UserAddressList } from './user-address-list'
 import { UserPasswordChangedEvent } from '../events/user-password-changed-event'
+import { UserCreatedEvent } from '../events/user-created-event'
 
 export interface UserProps {
   name: string
@@ -93,6 +94,7 @@ export class User extends AggregateRoot<UserProps> {
   static create(
     props: Optional<UserProps, 'createdAt' | 'addresses'>,
     id?: UniqueEntityID,
+    actorId?: UniqueEntityID,
   ) {
     const now = new Date()
     const user = new User(
@@ -106,6 +108,13 @@ export class User extends AggregateRoot<UserProps> {
       },
       id,
     )
+
+    const isNewUser = !id
+
+    if (isNewUser && actorId) {
+      user.addDomainEvent(new UserCreatedEvent(user, actorId.toString()))
+    }
+
     return user
   }
 }

@@ -5,7 +5,6 @@ import {
   Post,
   UseFilters,
   UseGuards,
-  UsePipes,
 } from '@nestjs/common'
 import { ZodValidationPipe } from '../../pipes/zod-validation.pipe'
 import { z } from 'zod'
@@ -41,6 +40,8 @@ import {
 } from '../../dtos/error/user'
 import { UserResponseDto } from '../../dtos/response/user'
 import { CreateUserRequestDto } from '../../dtos/requests/user'
+import { CurrentUser } from '@/infra/auth/current-user.decorator'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
 
 const createUserBodySchema = z.object({
   name: z.string(),
@@ -82,9 +83,15 @@ export class CreateUserController {
   @ApiConflictResponse({ type: UserAlreadyExistsDto })
   @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
   @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
-  @UsePipes(new ZodValidationPipe(createUserBodySchema))
-  async handle(@Body() body: CreateUserBodySchema) {
-    const result = await this.createUserUseCase.execute(body)
+  async handle(
+    @CurrentUser() currentUser: UserPayload,
+    @Body(new ZodValidationPipe(createUserBodySchema))
+    body: CreateUserBodySchema,
+  ) {
+    const result = await this.createUserUseCase.execute({
+      actorId: currentUser.sub,
+      ...body,
+    })
 
     if (result.isLeft()) {
       throw result.value
