@@ -10,6 +10,7 @@ import { UserRoleChangedEvent } from '../events/user-role-changed-event'
 import { UserActiveStatusChangedEvent } from '../events/user-active-status-changed-event'
 import { UserLoggedInEvent } from '../events/user-logged-in-event'
 import { UserLoggedOutEvent } from '../events/user-logged-out-event'
+import { UserRequestedPasswordResetEvent } from '../events/user-request-password-reset-event'
 
 export interface UserProps {
   name: string
@@ -133,6 +134,10 @@ export class User extends AggregateRoot<UserProps> {
 
   logout() {
     this.addDomainEvent(new UserLoggedOutEvent(this))
+  }
+
+  requestPasswordReset() {
+    this.addDomainEvent(new UserRequestedPasswordResetEvent(this))
   }
 
   private touch() {

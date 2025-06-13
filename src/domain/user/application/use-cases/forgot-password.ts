@@ -39,6 +39,9 @@ export class ForgotPasswordUseCase {
       html: `<p>Olá,</p><p>Para redefinir sua senha, <a href="${url}">clique aqui</a>. Este link expira em 1 hora.</p>`,
     })
 
+    user.requestPasswordReset()
+    await this.usersRepository.dispatchEvent(user.id)
+
     return right(null)
   }
 }
