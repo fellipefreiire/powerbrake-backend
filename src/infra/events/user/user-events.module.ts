@@ -6,6 +6,7 @@ import { OnUserCreated } from '@/domain/audit-log/application/subscribers/user/o
 import { OnUserUpdated } from '@/domain/audit-log/application/subscribers/user/on-user-updated'
 import { OnUserRoleChanged } from '@/domain/audit-log/application/subscribers/user/on-user-role-changed'
 import { OnUserActiveStatusChanged } from '@/domain/audit-log/application/subscribers/user/on-user-active-status-changed'
+import { OnUserLoggedIn } from '@/domain/audit-log/application/subscribers/user/on-user-logged-in'
 
 @Module({
   imports: [AuditLogDatabaseModule],
@@ -15,6 +16,7 @@ import { OnUserActiveStatusChanged } from '@/domain/audit-log/application/subscr
     OnUserPasswordChanged,
     OnUserRoleChanged,
     OnUserActiveStatusChanged,
+    OnUserLoggedIn,
     CreateAuditLogUseCase,
   ],
 })

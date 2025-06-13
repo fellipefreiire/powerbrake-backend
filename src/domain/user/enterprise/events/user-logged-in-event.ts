@@ -1,15 +1,13 @@
 import { DomainEvent } from '@/core/events/domain-event'
-import type { User } from '../entities/user'
+import { User } from '../entities/user'
 import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 
-export class UserCreatedEvent implements DomainEvent {
+export class UserLoggedInEvent implements DomainEvent {
   public occurredAt: Date
   public user: User
-  public actorId: string
 
-  constructor(user: User, actorId: string) {
+  constructor(user: User) {
     this.user = user
-    this.actorId = actorId
     this.occurredAt = new Date()
   }
 

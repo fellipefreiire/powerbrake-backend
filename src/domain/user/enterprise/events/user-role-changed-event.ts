@@ -1,5 +1,5 @@
 import { DomainEvent } from '@/core/events/domain-event'
-import { UniqueEntityID } from '@/core/entities/unique-entity-id'
+import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import type { User } from '../entities/user'
 
 export class UserRoleChangedEvent implements DomainEvent {

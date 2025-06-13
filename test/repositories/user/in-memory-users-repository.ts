@@ -1,3 +1,4 @@
+import type { UniqueEntityID } from '@/core/entities/unique-entity-id'
 import { DomainEvents } from '@/core/events/domain-events'
 import type { PaginationParams } from '@/core/repositories/pagination-params'
 import type { UsersRepository } from '@/domain/user/application/repositories/user-repository'
@@ -51,5 +52,9 @@ export class InMemoryUsersRepository implements UsersRepository {
     const itemIndex = this.items.findIndex((item) => item.id === user.id)
 
     this.items.splice(itemIndex, 1)
+  }
+
+  async dispatchEvent(userId: UniqueEntityID) {
+    DomainEvents.dispatchEventsForAggregate(userId)
   }
 }

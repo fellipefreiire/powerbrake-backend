@@ -72,6 +72,9 @@ export class AuthenticateUserUseCase {
       jti,
     })
 
+    user.login()
+    await this.usersRepository.dispatchEvent(user.id)
+
     return right({
       accessToken,
       refreshToken,
