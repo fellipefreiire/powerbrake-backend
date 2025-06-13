@@ -50,7 +50,7 @@ export class ResetPasswordUseCase {
 
     const passwordHash = await this.hashGenerator.hash(password)
 
-    user.updatePassword(passwordHash)
+    user.resetPassword(passwordHash)
 
     await this.usersRepository.save(user)
     await this.refreshTokenRepository.revokeAllForUser(user.id.toString())

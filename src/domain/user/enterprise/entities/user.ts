@@ -11,6 +11,7 @@ import { UserActiveStatusChangedEvent } from '../events/user-active-status-chang
 import { UserLoggedInEvent } from '../events/user-logged-in-event'
 import { UserLoggedOutEvent } from '../events/user-logged-out-event'
 import { UserRequestedPasswordResetEvent } from '../events/user-request-password-reset-event'
+import { UserResetPasswordEvent } from '../events/user-reset-password-event'
 
 export interface UserProps {
   name: string
@@ -88,6 +89,13 @@ export class User extends AggregateRoot<UserProps> {
     this.props.passwordHash = hash
 
     this.addDomainEvent(new UserPasswordChangedEvent(this))
+    this.touch()
+  }
+
+  resetPassword(hash: string) {
+    this.props.passwordHash = hash
+
+    this.addDomainEvent(new UserResetPasswordEvent(this))
     this.touch()
   }
 

@@ -9,6 +9,7 @@ import { OnUserActiveStatusChanged } from '@/domain/audit-log/application/subscr
 import { OnUserLoggedIn } from '@/domain/audit-log/application/subscribers/user/on-user-logged-in'
 import { OnUserLoggedOut } from '@/domain/audit-log/application/subscribers/user/on-user-logged-out'
 import { OnUserRequestedPasswordReset } from '@/domain/audit-log/application/subscribers/user/on-user-requested-password-reset'
+import { OnUserResetPassword } from '@/domain/audit-log/application/subscribers/user/on-user-reset-password'
 
 @Module({
   imports: [AuditLogDatabaseModule],
@@ -21,6 +22,7 @@ import { OnUserRequestedPasswordReset } from '@/domain/audit-log/application/sub
     OnUserLoggedIn,
     OnUserLoggedOut,
     OnUserRequestedPasswordReset,
+    OnUserResetPassword,
     CreateAuditLogUseCase,
   ],
 })

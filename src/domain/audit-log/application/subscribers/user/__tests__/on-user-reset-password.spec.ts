@@ -5,14 +5,14 @@ import { DomainEvents } from '@/core/events/domain-events'
 import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
 import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
 import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
-import { OnUserRequestedPasswordReset } from '@/domain/audit-log/application/subscribers/user/on-user-requested-password-reset'
+import { OnUserResetPassword } from '@/domain/audit-log/application/subscribers/user/on-user-reset-password'
 
 let inMemoryUsersRepository: InMemoryUsersRepository
 let inMemoryAuditLogRepository: InMemoryAuditLogRepository
 let createAuditLogUseCase: CreateAuditLogUseCase
 let createAuditLogSpy: ReturnType<typeof vi.spyOn>
 
-describe('On User Requested Password Reset (subscriber)', () => {
+describe('On User Reset Password (subscriber)', () => {
   beforeEach(() => {
     inMemoryUsersRepository = new InMemoryUsersRepository()
     inMemoryAuditLogRepository = new InMemoryAuditLogRepository(
@@ -23,14 +23,15 @@ describe('On User Requested Password Reset (subscriber)', () => {
     )
     createAuditLogSpy = vi.spyOn(createAuditLogUseCase, 'execute')
 
-    new OnUserRequestedPasswordReset(createAuditLogUseCase)
+    new OnUserResetPassword(createAuditLogUseCase)
   })
 
-  it('should create audit log when user requests password reset', async () => {
+  it('should create audit log when user resets password', async () => {
     const user = makeUser()
     inMemoryUsersRepository.create(user)
 
-    user.requestPasswordReset()
+    user.resetPassword('password-hashed')
+    inMemoryUsersRepository.save(user)
 
     DomainEvents.dispatchEventsForAggregate(user.id)
 
@@ -43,7 +44,7 @@ describe('On User Requested Password Reset (subscriber)', () => {
       expect.objectContaining({
         actorId: user.id.toString(),
         actorType: 'USER',
-        action: 'user:requested_password_reset',
+        action: 'user:reset_password',
         entity: 'USER',
         entityId: user.id.toString(),
       }),
