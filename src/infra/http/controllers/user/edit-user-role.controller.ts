@@ -41,6 +41,8 @@ import {
   WrongCredentialsDto,
 } from '../../dtos/error/user'
 import { EditUserRoleRequestDto } from '../../dtos/requests/user'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
+import { CurrentUser } from '@/infra/auth/current-user.decorator'
 
 const editUserRoleBodySchema = z.object({
   role: roleSchema,
@@ -69,6 +71,7 @@ export class EditUserRoleController {
   @ApiUnprocessableEntityResponse({ type: UnprocessableEntityDto })
   @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
   async handle(
+    @CurrentUser() currentUser: UserPayload,
     @Param('id', ParseUuidPipe) id: string,
     @Body(new ZodValidationPipe(editUserRoleBodySchema))
     body: EditUserRoleBodySchema,
@@ -78,6 +81,7 @@ export class EditUserRoleController {
     const result = await this.editUserRoleUseCase.execute({
       id,
       role,
+      actorId: currentUser.sub,
     })
 
     if (result.isLeft()) {

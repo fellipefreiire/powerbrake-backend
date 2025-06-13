@@ -8,6 +8,7 @@ import type { Role } from '@prisma/client'
 type EditUserRoleUseCaseRequest = {
   id: string
   role: Role
+  actorId: string
 }
 
 type EditUserRoleUseCaseResponse = Either<
@@ -24,6 +25,7 @@ export class EditUserRoleUseCase {
   async execute({
     id,
     role,
+    actorId,
   }: EditUserRoleUseCaseRequest): Promise<EditUserRoleUseCaseResponse> {
     const user = await this.usersRepository.findById(id)
 
@@ -31,7 +33,7 @@ export class EditUserRoleUseCase {
       return left(new UserNotFoundError())
     }
 
-    user.updateRole(role)
+    user.updateRole(role, actorId)
 
     await this.usersRepository.save(user)
 

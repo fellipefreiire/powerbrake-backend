@@ -6,6 +6,7 @@ import { UserAddressList } from './user-address-list'
 import { UserPasswordChangedEvent } from '../events/user-password-changed-event'
 import { UserCreatedEvent } from '../events/user-created-event'
 import { UserUpdatedEvent } from '../events/user-updated-event'
+import { UserRoleChangedEvent } from '../events/user-role-changed-event'
 
 export interface UserProps {
   name: string
@@ -56,8 +57,11 @@ export class User extends AggregateRoot<UserProps> {
     return this.props.updatedAt
   }
 
-  updateRole(value: Role) {
+  updateRole(value: Role, actorId: string) {
+    const previousData = this.props.role
     this.props.role = value
+
+    this.addDomainEvent(new UserRoleChangedEvent(this, actorId, previousData))
     this.touch()
   }
 
@@ -72,9 +76,9 @@ export class User extends AggregateRoot<UserProps> {
   }
 
   updatePassword(hash: string) {
-    this.addDomainEvent(new UserPasswordChangedEvent(this))
-
     this.props.passwordHash = hash
+
+    this.addDomainEvent(new UserPasswordChangedEvent(this))
     this.touch()
   }
 
