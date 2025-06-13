@@ -9,6 +9,7 @@ import { UserUpdatedEvent } from '../events/user-updated-event'
 import { UserRoleChangedEvent } from '../events/user-role-changed-event'
 import { UserActiveStatusChangedEvent } from '../events/user-active-status-changed-event'
 import { UserLoggedInEvent } from '../events/user-logged-in-event'
+import { UserLoggedOutEvent } from '../events/user-logged-out-event'
 
 export interface UserProps {
   name: string
@@ -128,6 +129,10 @@ export class User extends AggregateRoot<UserProps> {
 
   login() {
     this.addDomainEvent(new UserLoggedInEvent(this))
+  }
+
+  logout() {
+    this.addDomainEvent(new UserLoggedOutEvent(this))
   }
 
   private touch() {

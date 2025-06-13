@@ -43,7 +43,10 @@ export class LogoutUserController {
     type: InternalServerErrorDto,
   })
   async handle(@CurrentUser() user: UserPayload) {
-    const result = await this.logoutUserUseCase.execute({ jti: user.jti })
+    const result = await this.logoutUserUseCase.execute({
+      jti: user.jti,
+      userId: user.sub,
+    })
 
     if (result.isLeft()) throw result.value
   }

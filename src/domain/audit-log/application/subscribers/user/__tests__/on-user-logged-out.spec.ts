@@ -5,14 +5,14 @@ import { DomainEvents } from '@/core/events/domain-events'
 import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
 import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
 import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
-import { OnUserLoggedIn } from '@/domain/audit-log/application/subscribers/user/on-user-logged-in'
+import { OnUserLoggedOut } from '@/domain/audit-log/application/subscribers/user/on-user-logged-out'
 
 let inMemoryUsersRepository: InMemoryUsersRepository
 let inMemoryAuditLogRepository: InMemoryAuditLogRepository
 let createAuditLogUseCase: CreateAuditLogUseCase
 let createAuditLogSpy: ReturnType<typeof vi.spyOn>
 
-describe('On User Logged In (subscriber)', () => {
+describe('On User Logged Out (subscriber)', () => {
   beforeEach(() => {
     inMemoryUsersRepository = new InMemoryUsersRepository()
     inMemoryAuditLogRepository = new InMemoryAuditLogRepository(
@@ -23,14 +23,14 @@ describe('On User Logged In (subscriber)', () => {
     )
     createAuditLogSpy = vi.spyOn(createAuditLogUseCase, 'execute')
 
-    new OnUserLoggedIn(createAuditLogUseCase)
+    new OnUserLoggedOut(createAuditLogUseCase)
   })
 
-  it('should create audit log when user logs in', async () => {
+  it('should create audit log when user logs out', async () => {
     const user = makeUser()
     inMemoryUsersRepository.create(user)
 
-    user.login()
+    user.logout()
     inMemoryUsersRepository.dispatchEvent(user.id)
 
     DomainEvents.dispatchEventsForAggregate(user.id)
@@ -44,7 +44,7 @@ describe('On User Logged In (subscriber)', () => {
       expect.objectContaining({
         actorId: user.id.toString(),
         actorType: 'USER',
-        action: 'user:logged_in',
+        action: 'user:logged_out',
         entity: 'USER',
         entityId: user.id.toString(),
       }),

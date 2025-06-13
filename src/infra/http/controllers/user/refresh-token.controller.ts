@@ -48,7 +48,6 @@ export class RefreshTokenController {
     const result = await this.refreshUserToken.execute({ refreshToken })
 
     if (result.isLeft()) {
-      console.log('Throwing error:', result.value)
       throw result.value
     }
 
