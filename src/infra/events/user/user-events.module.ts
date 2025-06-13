@@ -5,6 +5,7 @@ import { AuditLogDatabaseModule } from '@/infra/database/prisma/repositories/aud
 import { OnUserCreated } from '@/domain/audit-log/application/subscribers/user/on-user-created'
 import { OnUserUpdated } from '@/domain/audit-log/application/subscribers/user/on-user-updated'
 import { OnUserRoleChanged } from '@/domain/audit-log/application/subscribers/user/on-user-role-changed'
+import { OnUserActiveStatusChanged } from '@/domain/audit-log/application/subscribers/user/on-user-active-status-changed'
 
 @Module({
   imports: [AuditLogDatabaseModule],
@@ -13,6 +14,7 @@ import { OnUserRoleChanged } from '@/domain/audit-log/application/subscribers/us
     OnUserUpdated,
     OnUserPasswordChanged,
     OnUserRoleChanged,
+    OnUserActiveStatusChanged,
     CreateAuditLogUseCase,
   ],
 })

@@ -15,6 +15,7 @@ describe('Edit User', () => {
   })
 
   it('should be able to edit a user', async () => {
+    const adminUser = makeUser({ role: 'ADMIN' })
     const user = makeUser(
       {
         email: 'johndoe@example.com',
@@ -27,6 +28,7 @@ describe('Edit User', () => {
     const result = await sut.execute({
       id: user.id.toString(),
       role: 'SUPERVISOR',
+      actorId: adminUser.id.toString(),
     })
 
     expect(result.isRight()).toBe(true)

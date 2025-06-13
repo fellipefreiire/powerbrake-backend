@@ -30,6 +30,8 @@ import {
   UserNotFoundDto,
   WrongCredentialsDto,
 } from '../../dtos/error/user'
+import { CurrentUser } from '@/infra/auth/current-user.decorator'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
 
 @UseFilters(UserErrorFilter)
 @ApiTags('Users')
@@ -52,9 +54,13 @@ export class EditUserStatusController {
   @ApiForbiddenResponse({ type: UserForbiddenDto })
   @ApiNotFoundResponse({ type: UserNotFoundDto })
   @ApiInternalServerErrorResponse({ type: InternalServerErrorDto })
-  async handle(@Param('id', ParseUuidPipe) id: string) {
+  async handle(
+    @CurrentUser() currentUser: UserPayload,
+    @Param('id', ParseUuidPipe) id: string,
+  ) {
     const result = await this.editUserStatusUseCase.execute({
       id,
+      actorId: currentUser.sub,
     })
 
     if (result.isLeft()) {

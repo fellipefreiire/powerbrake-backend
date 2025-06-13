@@ -15,17 +15,17 @@ export class OnUserRoleChanged implements EventHandler {
   }
 
   async handle(event: UserRoleChangedEvent): Promise<void> {
-    const user = event.user
+    const { user, actorId, previousRole } = event
 
     await this.createAuditLog.execute({
-      actorId: event.actorId,
+      actorId,
       actorType: 'USER',
       action: 'user:role_updated',
       entity: 'USER',
       entityId: user.id.toString(),
       changes: {
         role: {
-          before: event.previousRole,
+          before: previousRole,
           after: user.role,
         },
       },

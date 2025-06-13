@@ -1,30 +1,36 @@
 import { Injectable } from '@nestjs/common'
 import { DomainEvents } from '@/core/events/domain-events'
 import { EventHandler } from '@/core/events/event-handler'
-import { UserPasswordChangedEvent } from '@/domain/user/enterprise/events/user-password-changed-event'
+import { UserActiveStatusChangedEvent } from '@/domain/user/enterprise/events/user-active-status-changed-event'
 import { CreateAuditLogUseCase } from '@/domain/audit-log/application/use-cases/create-audit-log'
 
 @Injectable()
-export class OnUserPasswordChanged implements EventHandler {
+export class OnUserActiveStatusChanged implements EventHandler {
   constructor(private createAuditLog: CreateAuditLogUseCase) {
     this.setupSubscriptions()
   }
 
   setupSubscriptions(): void {
-    DomainEvents.register(this.handle.bind(this), UserPasswordChangedEvent.name)
+    DomainEvents.register(
+      this.handle.bind(this),
+      UserActiveStatusChangedEvent.name,
+    )
   }
 
-  private async handle(event: UserPasswordChangedEvent): Promise<void> {
-    const { user } = event
+  async handle(event: UserActiveStatusChangedEvent): Promise<void> {
+    const { user, previousIsActive, actorId } = event
 
     await this.createAuditLog.execute({
-      actorId: user.id.toString(),
+      actorId,
       actorType: 'USER',
-      action: 'user:password_changed',
+      action: 'user:active_status_updated',
       entity: 'USER',
       entityId: user.id.toString(),
       changes: {
-        passwordChanged: true,
+        isActive: {
+          before: previousIsActive,
+          after: user.isActive,
+        },
       },
     })
   }

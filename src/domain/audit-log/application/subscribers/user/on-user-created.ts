@@ -15,10 +15,10 @@ export class OnUserCreated implements EventHandler {
   }
 
   async handle(event: UserCreatedEvent): Promise<void> {
-    const user = event.user
+    const { user, actorId } = event
 
     await this.createAuditLog.execute({
-      actorId: event.actorId,
+      actorId,
       actorType: 'USER',
       action: 'user:created',
       entity: 'USER',

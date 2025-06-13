@@ -7,6 +7,7 @@ import { UserPasswordChangedEvent } from '../events/user-password-changed-event'
 import { UserCreatedEvent } from '../events/user-created-event'
 import { UserUpdatedEvent } from '../events/user-updated-event'
 import { UserRoleChangedEvent } from '../events/user-role-changed-event'
+import { UserActiveStatusChangedEvent } from '../events/user-active-status-changed-event'
 
 export interface UserProps {
   name: string
@@ -65,8 +66,13 @@ export class User extends AggregateRoot<UserProps> {
     this.touch()
   }
 
-  toggleActive() {
+  toggleActive(actorId: string) {
+    const previousData = this.props.isActive
     this.props.isActive = !this.props.isActive
+
+    this.addDomainEvent(
+      new UserActiveStatusChangedEvent(this, actorId, previousData),
+    )
     this.touch()
   }
 

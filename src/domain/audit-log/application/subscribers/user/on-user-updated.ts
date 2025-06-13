@@ -30,20 +30,19 @@ export class OnUserUpdated implements EventHandler {
   }
 
   async handle(event: UserUpdatedEvent): Promise<void> {
-    const user = event.user
-    const previous = event.previousData
+    const { user, previousData } = event
 
     const changes: UserUpdatedChanges = {
       name: {
-        before: previous.name,
+        before: previousData.name,
         after: user.name,
       },
       avatarId: {
-        before: previous.avatarId?.toString(),
+        before: previousData.avatarId?.toString(),
         after: user.avatarId?.toString(),
       },
       addresses: {
-        before: previous.addresses,
+        before: previousData.addresses,
         after: user.addresses,
       },
     }

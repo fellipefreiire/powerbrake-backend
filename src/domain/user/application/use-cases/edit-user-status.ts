@@ -6,6 +6,7 @@ import { User } from '../../enterprise/entities/user'
 
 type EditUserStatusUseCaseRequest = {
   id: string
+  actorId: string
 }
 
 type EditUserStatusUseCaseResponse = Either<
@@ -21,6 +22,7 @@ export class EditUserStatusUseCase {
 
   async execute({
     id,
+    actorId,
   }: EditUserStatusUseCaseRequest): Promise<EditUserStatusUseCaseResponse> {
     const user = await this.usersRepository.findById(id)
 
@@ -28,7 +30,7 @@ export class EditUserStatusUseCase {
       return left(new UserNotFoundError())
     }
 
-    user.toggleActive()
+    user.toggleActive(actorId)
 
     await this.usersRepository.save(user)
 
