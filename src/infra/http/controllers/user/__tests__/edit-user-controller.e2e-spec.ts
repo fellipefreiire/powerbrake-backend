@@ -157,22 +157,6 @@ describe('Edit User (E2E)', () => {
       expect(addressesInDB[0].street).toBe('New Street')
     })
 
-    it('[400] Bad Request → should not be able to edit user without required params', async () => {
-      const response = await request(app.getHttpServer())
-        .patch(`/v1/users/${adminUser.id.toString()}`)
-        .set('Authorization', `Bearer ${adminAccessToken.token}`)
-        .send({})
-
-      expect(response.statusCode).toBe(400)
-      expect(response.body).toEqual(
-        expect.objectContaining({
-          statusCode: 400,
-          error: 'Bad Request',
-          message: 'Missing required fields',
-        }),
-      )
-    })
-
     it('[401] Unauthorized → should not be able to edit user without token', async () => {
       const payload = { name: 'Attempt NoAuth' }
 
@@ -208,11 +192,11 @@ describe('Edit User (E2E)', () => {
       })
     })
 
-    it('[422] Unprocessable Entity → should not be able to edit user with invalid params', async () => {
+    it('[422] Unprocessable Entity → should fail with invalid avatarId UUID', async () => {
       const response = await request(app.getHttpServer())
         .patch(`/v1/users/${adminUser.id.toString()}`)
         .set('Authorization', `Bearer ${adminAccessToken.token}`)
-        .send({ name: '', addresses: [] })
+        .send({ avatarId: 'invalid-uuid' })
 
       expect(response.statusCode).toBe(422)
       expect(response.body).toEqual(

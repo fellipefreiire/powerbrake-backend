@@ -5,6 +5,7 @@ import type { Role } from '@prisma/client'
 import { UserAddressList } from './user-address-list'
 import { UserPasswordChangedEvent } from '../events/user-password-changed-event'
 import { UserCreatedEvent } from '../events/user-created-event'
+import { UserUpdatedEvent } from '../events/user-updated-event'
 
 export interface UserProps {
   name: string
@@ -55,11 +56,6 @@ export class User extends AggregateRoot<UserProps> {
     return this.props.updatedAt
   }
 
-  updateName(value: string) {
-    this.props.name = value
-    this.touch()
-  }
-
   updateRole(value: Role) {
     this.props.role = value
     this.touch()
@@ -67,11 +63,6 @@ export class User extends AggregateRoot<UserProps> {
 
   toggleActive() {
     this.props.isActive = !this.props.isActive
-    this.touch()
-  }
-
-  updateAvatar(value: UniqueEntityID | undefined | null) {
-    this.props.avatarId = value
     this.touch()
   }
 
@@ -85,6 +76,43 @@ export class User extends AggregateRoot<UserProps> {
 
     this.props.passwordHash = hash
     this.touch()
+  }
+
+  update({
+    name,
+    avatarId,
+    addresses,
+  }: {
+    name: string
+    avatarId: UniqueEntityID | null
+    addresses: UserAddressList
+  }) {
+    let updated = false
+    const previousData = {
+      name: this.props.name,
+      avatarId: this.props.avatarId,
+      addresses: this.props.addresses,
+    }
+
+    if (this.props.name !== name) {
+      this.props.name = name
+      updated = true
+    }
+
+    if (this.props.avatarId?.toString() !== avatarId?.toString()) {
+      this.props.avatarId = avatarId
+      updated = true
+    }
+
+    if (!this.props.addresses.equals(addresses)) {
+      this.props.addresses = addresses
+      updated = true
+    }
+
+    if (updated) {
+      this.touch()
+      this.addDomainEvent(new UserUpdatedEvent(this, previousData))
+    }
   }
 
   private touch() {

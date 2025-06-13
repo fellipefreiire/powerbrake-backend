@@ -13,8 +13,8 @@ import { UserAddressList } from '../../enterprise/entities/user-address-list'
 
 type EditUserUseCaseRequest = {
   id: string
-  name: string
-  addresses: {
+  name?: string
+  addresses?: {
     street: string
     number: string
     complement?: string | null
@@ -48,59 +48,59 @@ export class EditUserUseCase {
     avatarId,
   }: EditUserUseCaseRequest): Promise<EditUserUseCaseResponse> {
     const user = await this.usersRepository.findById(id)
+    if (!user) return left(new UserNotFoundError())
 
-    if (!user) {
-      return left(new UserNotFoundError())
+    let finalName = user.name
+    let finalAvatarId = user.avatarId ?? null
+    let finalAddressList = user.addresses
+
+    if (name) {
+      finalName = name
     }
 
-    user.updateName(name)
+    if (avatarId !== undefined) {
+      const avatarWatcher = new UserAvatarWatcher(user.avatarId ?? null)
+      const newAvatarId = avatarId ? new UniqueEntityID(avatarId) : null
 
-    const avatarWatcher = new UserAvatarWatcher(user.avatarId ?? null)
+      avatarWatcher.update(newAvatarId)
+      finalAvatarId = avatarWatcher.getUpdatedId()
 
-    avatarWatcher.update(avatarId ? new UniqueEntityID(avatarId) : null)
-
-    if (avatarWatcher.hasChanged()) {
-      const newAvatarId = avatarWatcher.getUpdatedId()
-
-      if (newAvatarId) {
+      if (avatarWatcher.hasChanged() && newAvatarId) {
         await this.userAvatarRepository.attachAvatarToUser(
           user.id.toString(),
           newAvatarId.toString(),
         )
       }
-
-      user.updateAvatar(newAvatarId)
     }
 
-    const currentAddresses = await this.userAddressRepository.findManyByUserId(
-      user.id.toString(),
-    )
+    if (addresses) {
+      const currentAddresses =
+        await this.userAddressRepository.findManyByUserId(id)
 
-    const addressWatcher = new UserAddressWatcher(currentAddresses)
-
-    const updatedAddresses = addresses.map((address) =>
-      Address.create({
-        ...address,
-        userId: user.id,
-      }),
-    )
-
-    addressWatcher.update(updatedAddresses)
-
-    if (addressWatcher.hasChanged()) {
-      const newAddresses = addressWatcher.getUpdatedAddresses()
-      await this.userAddressRepository.upsertManyForUser(
-        user.id.toString(),
-        newAddresses,
+      const addressWatcher = new UserAddressWatcher(currentAddresses)
+      const updatedAddresses = addresses.map((a) =>
+        Address.create({ ...a, userId: user.id }),
       )
 
-      user.updateAddress(new UserAddressList(newAddresses))
+      addressWatcher.update(updatedAddresses)
+
+      if (addressWatcher.hasChanged()) {
+        await this.userAddressRepository.upsertManyForUser(
+          user.id.toString(),
+          updatedAddresses,
+        )
+        finalAddressList = new UserAddressList(updatedAddresses)
+      }
     }
+
+    user.update({
+      name: finalName,
+      avatarId: finalAvatarId,
+      addresses: finalAddressList,
+    })
 
     await this.usersRepository.save(user)
 
-    return right({
-      data: user,
-    })
+    return right({ data: user })
   }
 }

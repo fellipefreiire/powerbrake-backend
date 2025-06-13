@@ -42,7 +42,7 @@ import { ParseUuidPipe, ZodValidationPipe } from '../../pipes'
 import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-update-self.handler'
 
 const editUserBodySchema = z.object({
-  name: z.string().min(1),
+  name: z.string().optional(),
   addresses: z
     .array(
       z.object({
@@ -55,7 +55,7 @@ const editUserBodySchema = z.object({
         zipCode: z.string(),
       }),
     )
-    .min(1),
+    .optional(),
   avatarId: z.string().uuid().optional(),
 })
 

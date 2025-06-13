@@ -40,8 +40,6 @@ export class CreateAuditLogUseCase {
       new UniqueEntityID(),
     )
 
-    console.log({ auditLog })
-
     await this.auditLogsRepository.create(auditLog)
 
     return right(undefined)

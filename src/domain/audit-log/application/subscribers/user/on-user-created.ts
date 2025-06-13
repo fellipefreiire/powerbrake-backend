@@ -17,8 +17,6 @@ export class OnUserCreated implements EventHandler {
   async handle(event: UserCreatedEvent): Promise<void> {
     const user = event.user
 
-    console.log({ user })
-
     await this.createAuditLog.execute({
       actorId: event.actorId,
       actorType: 'USER',

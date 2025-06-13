@@ -107,4 +107,15 @@ export abstract class WatchedList<T> {
     this.new = newItems
     this.removed = removedItems
   }
+
+  public equals(other: WatchedList<T>): boolean {
+    const a = this.getItems()
+    const b = other.getItems()
+
+    if (a.length !== b.length) return false
+
+    return a.every((itemA) =>
+      b.some((itemB) => this.compareItems(itemA, itemB)),
+    )
+  }
 }

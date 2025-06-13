@@ -45,7 +45,7 @@ describe('On user password changed (E2E)', () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "audit_logs" CASCADE')
   })
 
-  it('should create audit log when user changes password', async () => {
+  it('[EVENT] → should create audit log when user changes password', async () => {
     const password = '123456'
     const user = await userFactory.makePrismaUser({
       passwordHash: await hash(password, 8),
