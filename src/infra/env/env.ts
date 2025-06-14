@@ -22,6 +22,9 @@ export const envSchema = z.object({
   RESET_PASSWORD_URL: z.string(),
   RATE_LIMIT_POINTS: z.coerce.number(),
   RATE_LIMIT_DURATION: z.coerce.number(),
+  REDIS_COMMAND_TIMEOUT: z.coerce.number(),
+  EMAIL_SEND_TIMEOUT: z.coerce.number(),
+  STORAGE_TIMEOUT: z.coerce.number(),
 })
 
 export type Env = z.infer<typeof envSchema>
