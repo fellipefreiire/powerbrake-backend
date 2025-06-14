@@ -7,9 +7,11 @@ import {
 import { randomUUID } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 import { EnvService } from '@/infra/env/env.service'
+import { LoggerService } from '@/infra/logger/winston/logger.service'
 import { withTimeout } from '@/shared/utils/with-timeout'
 import { retryWithBackoff } from '@/shared/utils/retry-with-backoff'
-import { LoggerService } from '@/infra/logger/winston/logger.service'
+import { circuitBreaker, BrokenCircuitError } from 'cockatiel'
+import { createCircuitBreaker } from '@/shared/utils/circuit-breaker'
 
 @Injectable()
 export class R2Storage implements Uploader {
@@ -18,10 +20,11 @@ export class R2Storage implements Uploader {
   private readonly timeout: number
   private readonly retryAttempts: number
   private readonly retryBackoffMs: number
+  private breaker: ReturnType<typeof circuitBreaker>
 
   constructor(
     envService: EnvService,
-    private logger: LoggerService,
+    private readonly logger: LoggerService,
   ) {
     const accountId = envService.get('CLOUDFLARE_ACCOUNT_ID')
     this.bucketName = envService.get('AWS_BUCKET_NAME')
@@ -37,6 +40,8 @@ export class R2Storage implements Uploader {
         secretAccessKey: envService.get('AWS_SECRET_ACCESS_KEY'),
       },
     })
+
+    this.breaker = createCircuitBreaker('storage', this.logger)
   }
 
   async upload({
@@ -47,58 +52,81 @@ export class R2Storage implements Uploader {
     const uploadId = randomUUID()
     const uniqueFileName = `${uploadId}-${fileName}`
 
-    await retryWithBackoff(
-      () =>
-        withTimeout(
-          this.client.send(
-            new PutObjectCommand({
-              Bucket: this.bucketName,
-              Key: uniqueFileName,
-              ContentType: fileType,
-              Body: body,
-            }),
-          ),
-          this.timeout,
+    try {
+      await this.breaker.execute(() =>
+        retryWithBackoff(
+          () =>
+            withTimeout(
+              this.client.send(
+                new PutObjectCommand({
+                  Bucket: this.bucketName,
+                  Key: uniqueFileName,
+                  ContentType: fileType,
+                  Body: body,
+                }),
+              ),
+              this.timeout,
+            ),
+          {
+            retries: this.retryAttempts,
+            initialDelayMs: this.retryBackoffMs,
+            factor: 2,
+            onRetry: (err, attempt) => {
+              this.logger.warn(
+                `[Storage] upload retry #${attempt} after error: ${String(err)}`,
+              )
+            },
+          },
         ),
-      {
-        retries: this.retryAttempts,
-        initialDelayMs: this.retryBackoffMs,
-        factor: 2,
-        onRetry: (err, attempt) => {
-          this.logger.warn(
-            `Storage upload retry #${attempt} after error: ${err}`,
-          )
-        },
-      },
-    )
-
-    return {
-      url: uniqueFileName,
+      )
+      return {
+        url: uniqueFileName,
+      }
+    } catch (e) {
+      if (e instanceof BrokenCircuitError) {
+        this.logger.error(
+          'Serviço de storage indisponível (circuit breaker aberto)',
+        )
+        throw new Error('Serviço de storage indisponível')
+      }
+      throw e
     }
   }
 
   async delete(fileName: string): Promise<void> {
-    await retryWithBackoff(
-      () =>
-        withTimeout(
-          this.client.send(
-            new DeleteObjectCommand({
-              Bucket: this.bucketName,
-              Key: fileName,
-            }),
-          ),
-          this.timeout,
+    try {
+      await this.breaker.execute(() =>
+        retryWithBackoff(
+          () =>
+            withTimeout(
+              this.client.send(
+                new DeleteObjectCommand({
+                  Bucket: this.bucketName,
+                  Key: fileName,
+                }),
+              ),
+              this.timeout,
+            ),
+          {
+            retries: this.retryAttempts,
+            initialDelayMs: this.retryBackoffMs,
+            factor: 2,
+            onRetry: (err, attempt) => {
+              this.logger.warn(
+                `[Storage] delete retry #${attempt} after error: ${String(err)}`,
+              )
+            },
+          },
         ),
-      {
-        retries: this.retryAttempts,
-        initialDelayMs: this.retryBackoffMs,
-        factor: 2,
-        onRetry: (err, attempt) => {
-          this.logger.warn(
-            `Storage delete retry #${attempt} after error: ${err}`,
-          )
-        },
-      },
-    )
+      )
+    } catch (e) {
+      if (e instanceof BrokenCircuitError) {
+        this.logger.error(
+          'Serviço de storage indisponível (circuit breaker aberto)',
+        )
+        throw new Error('Serviço de storage indisponível')
+      }
+      throw e
+    }
   }
 }

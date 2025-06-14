@@ -10,4 +10,6 @@ export class FakeMailer implements MailRepository {
   }): Promise<void> {
     this.sent.push(data)
   }
+
+  async verify(): Promise<void> {}
 }
