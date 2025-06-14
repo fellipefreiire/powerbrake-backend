@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowImportingTsExtensions": true,
+    "types": [
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/core/**/*.ts",
+    "src/domain/**/*.ts",
+    "src/shared/**/*.ts",
+    "test/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "stryker.config.mts",
+    "src/infra/**/*",
+    "test/e2e/**/*"
+  ]
+}

@@ -1,13 +1,17 @@
 import { InMemoryAuditLogRepository } from 'test/repositories/audit-log/in-memory-audit-log.repository'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { CreateAuditLogUseCase } from '../create-audit-log'
+import { InMemoryUsersRepository } from 'test/repositories/user/in-memory-users-repository'
 
 let sut: CreateAuditLogUseCase
 let auditLogRepository: InMemoryAuditLogRepository
+let inMemoryUsersRepository: InMemoryUsersRepository
 
 describe('Create Audit Log Use Case', () => {
   beforeEach(() => {
-    auditLogRepository = new InMemoryAuditLogRepository()
+    inMemoryUsersRepository = new InMemoryUsersRepository()
+
+    auditLogRepository = new InMemoryAuditLogRepository(inMemoryUsersRepository)
     sut = new CreateAuditLogUseCase(auditLogRepository)
   })
 

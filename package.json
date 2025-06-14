@@ -19,6 +19,7 @@
     "test:debug": "vitest --inspect-brk -- inspect --logHeapUsage --threads=false",
     "test:e2e": "vitest run --config ./vitest.config.e2e.mjs",
     "test:e2e:watch": "vitest --config ./vitest.config.e2e.mjs",
+    "test:mutate": "stryker run",
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
@@ -69,6 +70,9 @@
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
     "@rocketseat/eslint-config": "^2.2.2",
+    "@stryker-mutator/core": "^9.0.1",
+    "@stryker-mutator/typescript-checker": "^9.0.1",
+    "@stryker-mutator/vitest-runner": "^9.0.1",
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.10.7",
     "@types/bcryptjs": "^2.4.6",
@@ -106,6 +110,5 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
-  },
-  "packageManager": "yarn@1.22.22+sha256.c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
+  }
 }

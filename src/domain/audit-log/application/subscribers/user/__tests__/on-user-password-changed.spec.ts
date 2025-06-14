@@ -46,6 +46,9 @@ describe('On User Password Changed (subscriber)', () => {
       expect.objectContaining({
         actorId: user.id.toString(),
         action: 'user:password_changed',
+        changes: {
+          passwordChanged: true,
+        },
       }),
     )
   })

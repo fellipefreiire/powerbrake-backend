@@ -52,6 +52,12 @@ describe('On User Created (subscriber)', () => {
         actorId: 'creator-id',
         action: 'user:created',
         entityId: user.id.toString(),
+        changes: {
+          name: user.name,
+          email: user.email,
+          role: user.role,
+          createdAt: user.createdAt,
+        },
       }),
     )
   })

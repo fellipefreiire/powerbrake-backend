@@ -15,6 +15,7 @@ describe('Activate User', () => {
   })
 
   it('should be able to activate a user', async () => {
+    const adminUser = makeUser({ role: 'ADMIN' })
     const user = makeUser(
       {
         email: 'johndoe@example.com',
@@ -29,6 +30,7 @@ describe('Activate User', () => {
 
     const result = await sut.execute({
       id: user.id.toString(),
+      actorId: adminUser.id.toString(),
     })
 
     expect(result.isRight()).toBe(true)
