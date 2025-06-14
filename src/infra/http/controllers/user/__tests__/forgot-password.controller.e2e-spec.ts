@@ -5,11 +5,15 @@ import { AppModule } from '@/infra/app.module'
 import { UserFactory } from 'test/factories/make-user'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
+import { RateLimitService } from '@/shared/rate-limit/rate-limit.service'
+import type { User } from '@/domain/user/enterprise/entities/user'
 
 describe('Forgot Password (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
+  let rateLimitService: RateLimitService
+  let adminUser: User
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -24,6 +28,7 @@ describe('Forgot Password (E2E)', () => {
 
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
+    rateLimitService = app.get(RateLimitService)
 
     await app.init()
   })
@@ -36,6 +41,12 @@ describe('Forgot Password (E2E)', () => {
     await prisma.$executeRawUnsafe(
       'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
     )
+    rateLimitService.clearAll()
+
+    adminUser = await userFactory.makePrismaUser({
+      email: 'johndoe@example.com',
+      role: 'ADMIN',
+    })
   })
 
   afterEach(async () => {
@@ -45,13 +56,9 @@ describe('Forgot Password (E2E)', () => {
   })
 
   it('[204] Success → should return 204 even if user exists or not', async () => {
-    await userFactory.makePrismaUser({
-      email: 'user@example.com',
-    })
-
     const response = await request(app.getHttpServer())
       .post('/v1/users/forgot-password')
-      .send({ email: 'user@example.com' })
+      .send({ email: adminUser.email })
 
     expect(response.statusCode).toBe(204)
   })
@@ -91,5 +98,19 @@ describe('Forgot Password (E2E)', () => {
         message: expect.any(String),
       }),
     )
+  })
+
+  it('[429] should return 429 after exceeding rate limit', async () => {
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post('/v1/users/forgot-password')
+        .send({ email: adminUser.email })
+    }
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/users/forgot-password')
+      .send({ email: adminUser.email })
+      .expect(429)
+    expect(response.headers['retry-after']).toBeDefined()
   })
 })

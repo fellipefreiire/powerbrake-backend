@@ -7,12 +7,14 @@ import { UserFactory } from 'test/factories/make-user'
 import { TokenService } from '@/infra/auth/token.service'
 import { UserDatabaseModule } from '@/infra/database/prisma/repositories/user/user-database.module'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import { RateLimitService } from '@/shared/rate-limit/rate-limit.service'
 
 describe('Reset Password (E2E)', () => {
   let app: INestApplication
   let prisma: PrismaService
   let userFactory: UserFactory
   let tokenService: TokenService
+  let rateLimitService: RateLimitService
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -26,6 +28,7 @@ describe('Reset Password (E2E)', () => {
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     tokenService = moduleRef.get(TokenService)
+    rateLimitService = app.get(RateLimitService)
 
     await app.init()
   })
@@ -38,6 +41,7 @@ describe('Reset Password (E2E)', () => {
     await prisma.$executeRawUnsafe(
       'TRUNCATE TABLE "users" RESTART IDENTITY CASCADE',
     )
+    rateLimitService.clearAll()
   })
 
   it('[204] Success → should reset the password with valid token', async () => {
@@ -122,5 +126,28 @@ describe('Reset Password (E2E)', () => {
         }),
       }),
     )
+  })
+
+  it('[429] should return 429 after exceeding rate limit', async () => {
+    const user = await userFactory.makePrismaUser({
+      email: 'reset429@example.com',
+    })
+    const token = await tokenService.generate({
+      sub: user.id.toString(),
+    })
+
+    for (let i = 0; i < 3; i++) {
+      await request(app.getHttpServer())
+        .post('/v1/users/reset-password')
+        .send({ token, password: 'NovaSenha@123' })
+        .expect(204)
+    }
+
+    const response = await request(app.getHttpServer())
+      .post('/v1/users/reset-password')
+      .send({ token, password: 'NovaSenha@123' })
+      .expect(429)
+
+    expect(response.headers['retry-after']).toBeDefined()
   })
 })

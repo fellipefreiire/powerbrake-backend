@@ -9,6 +9,8 @@ import { JwtService } from '@nestjs/jwt'
 import { PrismaService } from '@/infra/database/prisma/prisma.service'
 import { TokenService } from '@/infra/auth/token.service'
 import { CryptographyModule } from '@/infra/cryptography/cryptography.module'
+import type { User } from '@/domain/user/enterprise/entities/user'
+import { RateLimitService } from '@/shared/rate-limit/rate-limit.service'
 
 const authenticateUserEndpoint = '/v1/users/login'
 
@@ -17,6 +19,8 @@ describe('Authenticate User (E2E)', () => {
   let prisma: PrismaService
   let userFactory: UserFactory
   let jwt: JwtService
+  let adminUser: User
+  let rateLimitService: RateLimitService
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -32,6 +36,7 @@ describe('Authenticate User (E2E)', () => {
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     jwt = moduleRef.get(JwtService)
+    rateLimitService = app.get(RateLimitService)
 
     await app.init()
   })
@@ -42,6 +47,13 @@ describe('Authenticate User (E2E)', () => {
 
   beforeEach(async () => {
     await prisma.$executeRawUnsafe('TRUNCATE TABLE "users" CASCADE')
+    rateLimitService.clearAll()
+
+    adminUser = await userFactory.makePrismaUser({
+      email: 'johndoe@example.com',
+      role: 'ADMIN',
+      passwordHash: await hash('123456', 8),
+    })
   })
 
   afterEach(async () => {
@@ -50,15 +62,9 @@ describe('Authenticate User (E2E)', () => {
 
   describe(`[POST] ${authenticateUserEndpoint}`, async () => {
     it('[200] Success → Return token', async () => {
-      const password = '123456'
-      const user = await userFactory.makePrismaUser({
-        email: 'johndoe@example.com',
-        passwordHash: await hash(password, 8),
-      })
-
       const response = await request(app.getHttpServer())
         .post(authenticateUserEndpoint)
-        .send({ email: user.email, password })
+        .send({ email: adminUser.email, password: '123456' })
 
       expect(response.statusCode).toBe(200)
       expect(response.body).toEqual({
@@ -74,7 +80,7 @@ describe('Authenticate User (E2E)', () => {
       })
 
       const payload = jwt.verify(response.body.access_token.token)
-      expect(payload.sub).toBe(user.id.toString())
+      expect(payload.sub).toBe(adminUser.id.toString())
     })
 
     it('[400] Bad Request → Missing required fields', async () => {
@@ -106,15 +112,10 @@ describe('Authenticate User (E2E)', () => {
     })
 
     it('[401] Unauthorized → Wrong credentials', async () => {
-      const user = await userFactory.makePrismaUser({
-        email: 'johndoe@example.com',
-        passwordHash: await hash('123456', 8),
-      })
-
       const response = await request(app.getHttpServer())
         .post(authenticateUserEndpoint)
         .send({
-          email: user.email,
+          email: adminUser.email,
           password: 'WrongPass!',
         })
 
@@ -127,16 +128,14 @@ describe('Authenticate User (E2E)', () => {
     })
 
     it('[403] Forbidden → Inactive user', async () => {
-      const password = '123456'
       const user = await userFactory.makePrismaUser({
-        email: 'johndoe@example.com',
-        passwordHash: await hash(password, 8),
         isActive: false,
+        passwordHash: await hash('123456', 8),
       })
 
       const response = await request(app.getHttpServer())
         .post(authenticateUserEndpoint)
-        .send({ email: user.email, password })
+        .send({ email: user.email, password: '123456' })
 
       expect(response.statusCode).toBe(403)
       expect(response.body).toEqual({
@@ -159,6 +158,21 @@ describe('Authenticate User (E2E)', () => {
           message: 'Validation failed',
         }),
       )
+    })
+
+    it('[429] should return 429 after exceeding rate limit', async () => {
+      for (let i = 0; i < 5; i++) {
+        await request(app.getHttpServer())
+          .post('/v1/users/login')
+          .send({ email: adminUser.email, password: 'errada' })
+          .expect(401)
+      }
+
+      const response = await request(app.getHttpServer())
+        .post('/v1/users/login')
+        .send({ email: adminUser.email, password: 'errada' })
+        .expect(429)
+      expect(response.headers['retry-after']).toBeDefined()
     })
   })
 })

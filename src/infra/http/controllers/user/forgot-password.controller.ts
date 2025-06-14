@@ -5,6 +5,7 @@ import {
   HttpCode,
   UsePipes,
   UseFilters,
+  UseGuards,
 } from '@nestjs/common'
 import { ForgotPasswordUseCase } from '@/domain/user/application/use-cases/forgot-password'
 import { ZodValidationPipe } from '@/infra/http/pipes/zod-validation.pipe'
@@ -20,6 +21,8 @@ import { ForgotPasswordRequestDto } from '../../dtos/requests/user'
 import { z } from 'zod'
 import { EnvService } from '@/infra/env/env.service'
 import { Public } from '@/infra/auth/public'
+import { RateLimit } from '@/shared/rate-limit/rate-limit.decorator'
+import { RateLimitGuard } from '@/shared/rate-limit/rate-limit.guard'
 
 const forgotPasswordBodySchema = z.object({
   email: z.string().email(),
@@ -39,6 +42,8 @@ export class ForgotPasswordController {
   ) {}
 
   @Post('forgot-password')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(3, 60)
   @HttpCode(204)
   @UsePipes(new ZodValidationPipe(forgotPasswordBodySchema))
   @ApiOperation({ summary: 'Solicitar redefinição de senha' })

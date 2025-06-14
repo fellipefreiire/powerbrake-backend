@@ -30,6 +30,7 @@ import { ForgotPasswordUseCase } from '@/domain/user/application/use-cases/forgo
 import { EnvModule } from '@/infra/env/env.module'
 import { EditUserPasswordController } from './edit-user-password.controller'
 import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edit-user-password'
+import { RateLimitModule } from '@/shared/rate-limit/rate-limit.module'
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { EditUserPasswordUseCase } from '@/domain/user/application/use-cases/edi
     AuthModule,
     MailerModule,
     EnvModule,
+    RateLimitModule,
   ],
   controllers: [
     AuthenticateUserController,

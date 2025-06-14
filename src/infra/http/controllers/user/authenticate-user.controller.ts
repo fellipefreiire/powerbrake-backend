@@ -6,6 +6,7 @@ import {
   HttpCode,
   Post,
   UseFilters,
+  UseGuards,
   UsePipes,
 } from '@nestjs/common'
 import { z } from 'zod'
@@ -31,6 +32,8 @@ import { UserErrorFilter } from '../../filters/user-error.filter'
 import { UserInactiveDto, WrongCredentialsDto } from '../../dtos/error/user'
 import { AuthenticateUserRequestDto } from '../../dtos/requests/user'
 import { AuthenticateUserResponseDto } from '../../dtos/response/user'
+import { RateLimit } from '@/shared/rate-limit/rate-limit.decorator'
+import { RateLimitGuard } from '@/shared/rate-limit/rate-limit.guard'
 
 const authenticateBodySchema = z.object({
   email: z.string().email(),
@@ -48,6 +51,8 @@ export class AuthenticateUserController {
   constructor(private authenticateUser: AuthenticateUserUseCase) {}
 
   @Post('login')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(5, 60)
   @HttpCode(200)
   @ApiOperation({ summary: 'Authenticate user' })
   @ApiBody({ type: AuthenticateUserRequestDto })

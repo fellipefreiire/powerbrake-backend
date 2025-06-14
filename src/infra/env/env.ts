@@ -20,6 +20,8 @@ export const envSchema = z.object({
   AWS_BUCKET_NAME: z.string(),
   RESEND_API_KEY: z.string(),
   RESET_PASSWORD_URL: z.string(),
+  RATE_LIMIT_POINTS: z.coerce.number(),
+  RATE_LIMIT_DURATION: z.coerce.number(),
 })
 
 export type Env = z.infer<typeof envSchema>

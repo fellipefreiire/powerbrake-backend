@@ -5,6 +5,7 @@ import {
   HttpCode,
   UsePipes,
   UseFilters,
+  UseGuards,
 } from '@nestjs/common'
 import { ResetPasswordUseCase } from '@/domain/user/application/use-cases/reset-password'
 import { ZodValidationPipe } from '@/infra/http/pipes/zod-validation.pipe'
@@ -20,6 +21,8 @@ import { ServiceTag } from '@/infra/decorators/service-tag.decorator'
 import { z } from 'zod'
 import { Public } from '@/infra/auth/public'
 import { ResetPasswordRequestDto } from '../../dtos/requests/user'
+import { RateLimit } from '@/shared/rate-limit/rate-limit.decorator'
+import { RateLimitGuard } from '@/shared/rate-limit/rate-limit.guard'
 
 export const resetPasswordBodySchema = z.object({
   token: z.string().nonempty(),
@@ -37,6 +40,8 @@ export class ResetPasswordController {
   constructor(private resetPasswordUseCase: ResetPasswordUseCase) {}
 
   @Post('reset-password')
+  @UseGuards(RateLimitGuard)
+  @RateLimit(3, 60)
   @HttpCode(204)
   @UsePipes(new ZodValidationPipe(resetPasswordBodySchema))
   @ApiOperation({ summary: 'Reset user password using token' })
