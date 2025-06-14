@@ -394,6 +394,7 @@ src/
     logger/
       winston/
         logger.interceptor.ts
+        logger.interface.ts
         logger.service.ts
         winston.config.ts
         winston.provider.ts
@@ -401,6 +402,7 @@ src/
       logger.module.ts
     mail/
       resend/
+        resend-maile.spec.ts
         resend-mailer.ts
       mail-repository.ts
       mailer.module.ts
@@ -441,6 +443,12 @@ src/
       rate-limit.service.ts
     storage/
       uploader.ts
+    utils/
+      __tests__/
+        circuit-breaker.spec.ts
+      circuit-breaker.ts
+      retry-with-backoff.ts
+      with-timeout.ts
 test/
   cache/
     fake-cache.ts
@@ -457,6 +465,10 @@ test/
     make-audit-log.ts
     make-avatar.ts
     make-user.ts
+  infra/
+    fake-circuit-breaker.ts
+    fake-env.ts
+    fake-logger.ts
   mail/
     fake-mailer.ts
   repositories/
@@ -492,6 +504,132 @@ vitest.config.mjs
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="src/infra/logger/winston/logger.interface.ts">
+export interface LoggerPort {
+  info(msg: string, meta?: Record<string, unknown>): void
+  warn(msg: string, meta?: Record<string, unknown>): void
+  error(msg: string, meta?: Record<string, unknown>): void
+  debug(msg: string, meta?: Record<string, unknown>): void
+}
+</file>
+
+<file path="src/infra/mail/resend/resend-maile.spec.ts">
+import { ResendMailer } from '@/infra/mail/resend/resend-mailer'
+import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest'
+import { FakeLogger } from 'test/infra/fake-logger'
+import { Resend } from 'resend'
+import { makeFakeEnvService } from 'test/infra/fake-env'
+
+describe('ResendMailer (circuit breaker)', () => {
+  const logger = new FakeLogger()
+  const env = makeFakeEnvService()
+
+  let sendMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    sendMock = vi.fn()
+
+    // CORREÇÃO:
+    // O erro de tipo ocorre porque a classe `Emails` da biblioteca `resend` tem
+    // membros privados. Ao fazer o mock, não precisamos replicar a classe inteira.
+    // Em vez disso, criamos um objeto simples contendo apenas o método `send` que
+    // o nosso código utiliza e o convertemos para `any`. Isso instrui o TypeScript
+    // a ignorar a incompatibilidade de tipos, resolvendo o problema.
+    vi.spyOn(Resend.prototype, 'emails', 'get').mockReturnValue({
+      send: sendMock,
+    } as any)
+  })
+
+  afterEach(() => {
+    // Garante que os mocks sejam restaurados após cada teste
+    vi.restoreAllMocks()
+  })
+
+  it('should send email using Resend', async () => {
+    // Simula uma resposta de sucesso da API
+    sendMock.mockResolvedValueOnce({ data: { id: 'email_id' }, error: null })
+
+    const sut = new ResendMailer(env, logger)
+
+    await sut.send({
+      to: 'john@example.com',
+      subject: 'Test',
+      html: '<p>Hello</p>',
+    })
+
+    // A asserção foi atualizada para incluir o campo 'from',
+    // que é definido de forma fixa dentro da implementação de `ResendMailer`.
+    expect(sendMock).toHaveBeenCalledWith({
+      from: 'onboarding@resend.dev',
+      to: 'john@example.com',
+      subject: 'Test',
+      html: '<p>Hello</p>',
+    })
+  })
+
+  it('should throw if resend fails', async () => {
+    // Simula uma falha na chamada da API
+    sendMock.mockRejectedValueOnce(new Error('resend failure'))
+
+    const sut = new ResendMailer(env, logger)
+
+    // Verifica se o erro da API é propagado corretamente
+    await expect(() =>
+      sut.send({
+        to: 'fail@example.com',
+        subject: 'Failure',
+        html: '<p>Oops</p>',
+      }),
+    ).rejects.toThrowError('resend failure')
+  })
+})
+</file>
+
+<file path="test/infra/fake-env.ts">
+import type { Env } from '@/infra/env/env'
+import { EnvService } from '@/infra/env/env.service'
+import type { ConfigService } from '@nestjs/config'
+
+const fakeValues: Env = {
+  NODE_ENV: 'test',
+  APP_PORT: 3333,
+  DATABASE_URL: 'postgres://user:pass@localhost:5432/db',
+  DATABASE_HOST: 'localhost',
+  DATABASE_PORT: '5432',
+  DATABASE_USERNAME: 'user',
+  DATABASE_PASSWORD: 'pass',
+  DATABASE_NAME: 'app_db',
+  REDIS_HOST: '127.0.0.1',
+  REDIS_PORT: 6379,
+  REDIS_DB: 0,
+  REDIS_COMMAND_TIMEOUT: 1000,
+  RATE_LIMIT_POINTS: 10,
+  RATE_LIMIT_DURATION: 60,
+  CLOUDFLARE_ACCOUNT_ID: 'fake-cloudflare-id',
+  AWS_ACCESS_KEY_ID: 'fake-aws-key',
+  AWS_SECRET_ACCESS_KEY: 'fake-aws-secret',
+  AWS_BUCKET_NAME: 'fake-bucket',
+  STORAGE_RETRY_ATTEMPTS: 3,
+  STORAGE_RETRY_BACKOFF: 100,
+  STORAGE_TIMEOUT: 2000,
+  RESEND_API_KEY: 'fake-resend-api-key',
+  RESET_PASSWORD_URL: 'https://example.com/reset',
+  EMAIL_RETRY_ATTEMPTS: 3,
+  EMAIL_RETRY_BACKOFF: 100,
+  EMAIL_SEND_TIMEOUT: 3000,
+  JWT_PRIVATE_KEY: 'private-key',
+  JWT_PUBLIC_KEY: 'public-key',
+}
+
+const fakeConfigService = {
+  get: <T extends keyof Env>(key: T) => fakeValues[key],
+} as ConfigService<Env, true>
+
+export const makeFakeEnvService = () => {
+  return new EnvService(fakeConfigService)
+}
+</file>
 
 <file path=".husky/pre-push">
 #!/bin/sh
@@ -2587,27 +2725,6 @@ import { SetMetadata } from '@nestjs/common'
 
 export const IS_PUBLIC_KEY = 'isPublic'
 export const Public = () => SetMetadata(IS_PUBLIC_KEY, true)
-</file>
-
-<file path="src/infra/cache/redis/redis.service.ts">
-import { EnvService } from '@/infra/env/env.service'
-import { Injectable } from '@nestjs/common'
-import { Redis } from 'ioredis'
-
-@Injectable()
-export class RedisService extends Redis {
-  constructor(envService: EnvService) {
-    super({
-      host: envService.get('REDIS_HOST'),
-      port: Number(envService.get('REDIS_PORT')),
-      db: Number(envService.get('REDIS_DB')),
-    })
-  }
-
-  onModuleDestroy() {
-    return this.disconnect()
-  }
-}
 </file>
 
 <file path="src/infra/cryptography/bcrypt-hasher.ts">
@@ -4840,98 +4957,6 @@ export class AuditLogPresenter {
 }
 </file>
 
-<file path="src/infra/logger/winston/logger.interceptor.ts">
-import {
-  Injectable,
-  NestInterceptor,
-  ExecutionContext,
-  CallHandler,
-  HttpException,
-} from '@nestjs/common'
-import { Reflector } from '@nestjs/core'
-import { Observable, tap, catchError, throwError } from 'rxjs'
-
-import { SERVICE_TAG } from '@/infra/decorators/service-tag.decorator'
-import { AppLogger } from './logger.service'
-
-@Injectable()
-export class RequestLoggingInterceptor
-  implements NestInterceptor<unknown, unknown>
-{
-  constructor(
-    private readonly logger: AppLogger,
-    private readonly reflector: Reflector,
-  ) {}
-
-  intercept(
-    context: ExecutionContext,
-    next: CallHandler<unknown>,
-  ): Observable<unknown> {
-    const http = context.switchToHttp()
-    const req = http.getRequest()
-    const res = http.getResponse()
-    const start = Date.now()
-
-    const service =
-      this.reflector.get<string>(SERVICE_TAG, context.getClass()) ?? 'api'
-
-    const baseMeta = {
-      service,
-      route: req.originalUrl,
-      httpMethod: req.method,
-    }
-
-    return next.handle().pipe(
-      tap(() => {
-        const status = res.statusCode
-        this.logger.info(`[${status}] Request handled`, {
-          ...baseMeta,
-          timeToComplete: Date.now() - start,
-        })
-      }),
-
-      catchError((err) => {
-        const status = err instanceof HttpException ? err.getStatus() : 500
-
-        this.logger.error(`[${status}] ${err.message ?? 'Unhandled error'}`, {
-          ...baseMeta,
-          timeToComplete: Date.now() - start,
-        })
-
-        return throwError(() => err)
-      }),
-    )
-  }
-}
-</file>
-
-<file path="src/infra/logger/winston/logger.service.ts">
-import { Injectable, Inject } from '@nestjs/common'
-import { Logger } from 'winston'
-import { WINSTON_LOGGER } from './winston.token'
-
-@Injectable()
-export class AppLogger {
-  constructor(@Inject(WINSTON_LOGGER) private readonly logger: Logger) {}
-
-  info(msg: string, meta: Record<string, unknown> = {}) {
-    this.logger.info(msg, meta)
-  }
-
-  warn(msg: string, meta: Record<string, unknown> = {}) {
-    this.logger.warn(msg, meta)
-  }
-
-  error(msg: string, meta: Record<string, unknown> = {}) {
-    this.logger.error(msg, meta)
-  }
-
-  debug(msg: string, meta: Record<string, unknown> = {}) {
-    this.logger.debug(msg, meta)
-  }
-}
-</file>
-
 <file path="src/infra/logger/winston/winston.config.ts">
 import { createLogger, format, transports } from 'winston'
 import kleur from 'kleur'
@@ -5036,87 +5061,6 @@ export const WinstonLoggerProvider: Provider = {
 
 <file path="src/infra/logger/winston/winston.token.ts">
 export const WINSTON_LOGGER = Symbol('WINSTON_LOGGER')
-</file>
-
-<file path="src/infra/mail/mailer.module.ts">
-import { Module } from '@nestjs/common'
-import { ResendMailer } from './resend/resend-mailer'
-import { MailRepository } from './mail-repository'
-
-@Module({
-  providers: [
-    ResendMailer,
-    {
-      provide: MailRepository,
-      useClass: ResendMailer,
-    },
-  ],
-  exports: [MailRepository],
-})
-export class MailerModule {}
-</file>
-
-<file path="src/infra/storage/r2/r2-storage.ts">
-import { Uploader, type UploadParams } from '@/shared/storage/uploader'
-import {
-  DeleteObjectCommand,
-  PutObjectCommand,
-  S3Client,
-} from '@aws-sdk/client-s3'
-import { randomUUID } from 'node:crypto'
-import { Injectable } from '@nestjs/common'
-import { EnvService } from '@/infra/env/env.service'
-
-@Injectable()
-export class R2Storage implements Uploader {
-  private client: S3Client
-  private bucketName: string
-
-  constructor(envService: EnvService) {
-    const accountId = envService.get('CLOUDFLARE_ACCOUNT_ID')
-    this.bucketName = envService.get('AWS_BUCKET_NAME')
-
-    this.client = new S3Client({
-      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-      region: 'auto',
-      credentials: {
-        accessKeyId: envService.get('AWS_ACCESS_KEY_ID'),
-        secretAccessKey: envService.get('AWS_SECRET_ACCESS_KEY'),
-      },
-    })
-  }
-
-  async upload({
-    body,
-    fileName,
-    fileType,
-  }: UploadParams): Promise<{ url: string }> {
-    const uploadId = randomUUID()
-    const uniqueFileName = `${uploadId}-${fileName}`
-
-    await this.client.send(
-      new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: uniqueFileName,
-        ContentType: fileType,
-        Body: body,
-      }),
-    )
-
-    return {
-      url: uniqueFileName,
-    }
-  }
-
-  async delete(fileName: string): Promise<void> {
-    await this.client.send(
-      new DeleteObjectCommand({
-        Bucket: this.bucketName,
-        Key: fileName,
-      }),
-    )
-  }
-}
 </file>
 
 <file path="src/shared/address/enterprise/entities/address.ts">
@@ -5566,6 +5510,150 @@ export abstract class Uploader {
 }
 </file>
 
+<file path="src/shared/utils/__tests__/circuit-breaker.spec.ts">
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { BrokenCircuitError } from 'cockatiel'
+import { createCircuitBreaker } from '../circuit-breaker'
+import { FakeLogger } from 'test/infra/fake-logger'
+
+const alwaysFail = vi.fn().mockRejectedValue(new Error('external fail'))
+
+describe('createCircuitBreaker', () => {
+  let breaker: ReturnType<typeof createCircuitBreaker>
+  let fakeLogger: FakeLogger
+
+  beforeEach(() => {
+    fakeLogger = new FakeLogger()
+    breaker = createCircuitBreaker('test-breaker', fakeLogger)
+    alwaysFail.mockClear()
+    fakeLogger.clear()
+  })
+
+  it('should execute normally before the failure threshold', async () => {
+    await expect(breaker.execute(() => Promise.resolve('ok'))).resolves.toBe(
+      'ok',
+    )
+    await expect(breaker.execute(() => Promise.resolve('ok2'))).resolves.toBe(
+      'ok2',
+    )
+    expect(fakeLogger.warnings.length).toBe(0)
+    expect(fakeLogger.errors.length).toBe(0)
+  })
+
+  it('should open the breaker after reaching the failure threshold', async () => {
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow(
+      BrokenCircuitError,
+    )
+    expect(fakeLogger.warnings.some((msg) => msg.includes('opened'))).toBe(true)
+  })
+
+  it('should reset after halfOpenAfter time', async () => {
+    vi.useFakeTimers()
+
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow(
+      BrokenCircuitError,
+    )
+
+    vi.advanceTimersByTime(10_000)
+
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow('external fail')
+    await expect(breaker.execute(alwaysFail)).rejects.toThrow(
+      BrokenCircuitError,
+    )
+
+    const alwaysOk = vi.fn().mockResolvedValue('ok')
+    vi.advanceTimersByTime(10_000)
+    await expect(breaker.execute(alwaysOk)).resolves.toBe('ok')
+    await expect(breaker.execute(alwaysOk)).resolves.toBe('ok')
+
+    expect(fakeLogger.warnings.some((msg) => msg.includes('closed'))).toBe(true)
+
+    vi.useRealTimers()
+  })
+})
+</file>
+
+<file path="src/shared/utils/circuit-breaker.ts">
+import { circuitBreaker, handleAll, ConsecutiveBreaker } from 'cockatiel'
+
+export function createCircuitBreaker(
+  name: string,
+  logger: { warn: (msg: string) => void },
+) {
+  const breaker = circuitBreaker(handleAll, {
+    halfOpenAfter: 10_000,
+    breaker: new ConsecutiveBreaker(3),
+  })
+
+  breaker.onBreak(() => logger.warn(`[CB] ${name} opened (tripped)`))
+  breaker.onHalfOpen(() => logger.warn(`[CB] ${name} half-open (testing)`))
+  breaker.onReset(() => logger.warn(`[CB] ${name} closed (healthy)`))
+
+  return breaker
+}
+</file>
+
+<file path="src/shared/utils/retry-with-backoff.ts">
+/**
+ * retryWithBackoff - Executa uma função assíncrona com tentativas automáticas e backoff exponencial.
+ *
+ * @param fn        Função que retorna uma Promise<T> (ex: chamada HTTP, email, storage)
+ * @param options   retries: número de tentativas
+ *                  initialDelayMs: delay inicial (em ms)
+ *                  factor: fator de multiplicação do delay (default 2)
+ *                  onRetry: callback a cada tentativa falha
+ * @returns         Resultado da Promise, ou lança erro após esgotar tentativas
+ */
+export async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  options?: {
+    retries?: number
+    initialDelayMs?: number
+    factor?: number
+    onRetry?: (err: unknown, attempt: number) => void
+  },
+): Promise<T> {
+  const retries = options?.retries ?? 3
+  const factor = options?.factor ?? 2
+  let delay = options?.initialDelayMs ?? 300
+  let attempt = 0
+
+  while (attempt < retries) {
+    try {
+      return await fn()
+    } catch (err) {
+      attempt++
+      if (attempt >= retries) throw err
+      if (options?.onRetry) options.onRetry(err, attempt)
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      delay *= factor
+    }
+  }
+  throw new Error('retryWithBackoff: unexpected exit')
+}
+</file>
+
+<file path="src/shared/utils/with-timeout.ts">
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_resolve, reject) =>
+      setTimeout(() => reject(new Error('Timeout')), ms),
+    ),
+  ])
+}
+</file>
+
 <file path="test/cryptography/fake-hasher.ts">
 import type { HashComparer } from '@/shared/cryptography/hash-comparer'
 import type { HashGenerator } from '@/shared/cryptography/hash-generator'
@@ -5773,18 +5861,85 @@ export class AvatarFactory {
 }
 </file>
 
-<file path="test/mail/fake-mailer.ts">
-import type { MailRepository } from '@/infra/mail/mail-repository'
+<file path="test/infra/fake-circuit-breaker.ts">
+type ExecuteFn<T> = () => Promise<T> | T
 
-export class FakeMailer implements MailRepository {
-  public sent: Array<{ to: string; subject: string; html: string }> = []
+export class FakeCircuitBreaker {
+  private shouldFail = false
+  private failWithError: unknown = new Error('Circuit open')
+  private calls: number = 0
 
-  async send(data: {
-    to: string
-    subject: string
-    html: string
-  }): Promise<void> {
-    this.sent.push(data)
+  setOpen(error?: unknown) {
+    this.shouldFail = true
+    if (error) this.failWithError = error
+  }
+
+  reset() {
+    this.shouldFail = false
+    this.failWithError = new Error('Circuit open')
+  }
+
+  getCalls() {
+    return this.calls
+  }
+
+  async execute<T>(fn: ExecuteFn<T>): Promise<T> {
+    this.calls++
+    if (this.shouldFail) {
+      throw this.failWithError
+    }
+    return await fn()
+  }
+}
+</file>
+
+<file path="test/infra/fake-logger.ts">
+import type { LoggerPort } from '@/infra/logger/winston/logger.interface'
+
+export class FakeLogger implements LoggerPort {
+  public logs: string[] = []
+  public warnings: string[] = []
+  public errors: string[] = []
+  public debugs: string[] = []
+
+  info(message: string) {
+    this.logger('info', message)
+  }
+
+  warn(message: string) {
+    this.logger('warn', message)
+  }
+
+  error(message: string) {
+    this.logger('error', message)
+  }
+
+  debug(message: string) {
+    this.logger('debug', message)
+  }
+
+  private logger(level: 'info' | 'warn' | 'error' | 'debug', message: string) {
+    switch (level) {
+      case 'info':
+        this.logs.push(message)
+        break
+      case 'warn':
+        this.warnings.push(message)
+        break
+      case 'error':
+        this.errors.push(message)
+        break
+      case 'debug':
+        this.debugs.push(message)
+        break
+    }
+  }
+
+  clear() {
+    this.logs = []
+    this.warnings = []
+    this.errors = []
+    this.debugs = []
   }
 }
 </file>
@@ -7892,6 +8047,36 @@ export class RedisCacheRepository implements CacheRepository {
 }
 </file>
 
+<file path="src/infra/cache/redis/redis.service.ts">
+import { EnvService } from '@/infra/env/env.service'
+import { Injectable } from '@nestjs/common'
+import { Redis } from 'ioredis'
+
+@Injectable()
+export class RedisService extends Redis {
+  private _commandTimeout: number
+
+  constructor(envService: EnvService) {
+    super({
+      host: envService.get('REDIS_HOST'),
+      port: envService.get('REDIS_PORT'),
+      db: envService.get('REDIS_DB'),
+      connectTimeout: envService.get('REDIS_COMMAND_TIMEOUT'),
+    })
+
+    this._commandTimeout = envService.get('REDIS_COMMAND_TIMEOUT')
+  }
+
+  get commandTimeout() {
+    return this._commandTimeout
+  }
+
+  onModuleDestroy() {
+    return this.disconnect()
+  }
+}
+</file>
+
 <file path="src/infra/cache/cache-repository.ts">
 export abstract class CacheRepository {
   abstract set(key: string, value: string, ttlInSeconds?: number): Promise<void>
@@ -9016,26 +9201,97 @@ export class UserPresenter {
 }
 </file>
 
-<file path="src/infra/logger/logger.module.ts">
-import { Module, Global } from '@nestjs/common'
-import { WinstonLoggerProvider } from './winston/winston.provider'
-import { APP_INTERCEPTOR } from '@nestjs/core'
-import { AppLogger } from './winston/logger.service'
-import { RequestLoggingInterceptor } from './winston/logger.interceptor'
+<file path="src/infra/logger/winston/logger.interceptor.ts">
+import {
+  Injectable,
+  NestInterceptor,
+  ExecutionContext,
+  CallHandler,
+  HttpException,
+} from '@nestjs/common'
+import { Reflector } from '@nestjs/core'
+import { Observable, tap, catchError, throwError } from 'rxjs'
 
-@Global()
-@Module({
-  providers: [
-    WinstonLoggerProvider,
-    AppLogger,
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: RequestLoggingInterceptor,
-    },
-  ],
-  exports: [AppLogger],
-})
-export class LoggerModule {}
+import { SERVICE_TAG } from '@/infra/decorators/service-tag.decorator'
+import { LoggerService } from './logger.service'
+
+@Injectable()
+export class RequestLoggingInterceptor
+  implements NestInterceptor<unknown, unknown>
+{
+  constructor(
+    private readonly logger: LoggerService,
+    private readonly reflector: Reflector,
+  ) {}
+
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler<unknown>,
+  ): Observable<unknown> {
+    const http = context.switchToHttp()
+    const req = http.getRequest()
+    const res = http.getResponse()
+    const start = Date.now()
+
+    const service =
+      this.reflector.get<string>(SERVICE_TAG, context.getClass()) ?? 'api'
+
+    const baseMeta = {
+      service,
+      route: req.originalUrl,
+      httpMethod: req.method,
+    }
+
+    return next.handle().pipe(
+      tap(() => {
+        const status = res.statusCode
+        this.logger.info(`[${status}] Request handled`, {
+          ...baseMeta,
+          timeToComplete: Date.now() - start,
+        })
+      }),
+
+      catchError((err) => {
+        const status = err instanceof HttpException ? err.getStatus() : 500
+
+        this.logger.error(`[${status}] ${err.message ?? 'Unhandled error'}`, {
+          ...baseMeta,
+          timeToComplete: Date.now() - start,
+        })
+
+        return throwError(() => err)
+      }),
+    )
+  }
+}
+</file>
+
+<file path="src/infra/logger/winston/logger.service.ts">
+import { Injectable, Inject } from '@nestjs/common'
+import { Logger } from 'winston'
+import { WINSTON_LOGGER } from './winston.token'
+import type { LoggerPort } from './logger.interface'
+
+@Injectable()
+export class LoggerService implements LoggerPort {
+  constructor(@Inject(WINSTON_LOGGER) private readonly logger: Logger) {}
+
+  info(msg: string, meta: Record<string, unknown> = {}) {
+    this.logger.info(msg, meta)
+  }
+
+  warn(msg: string, meta: Record<string, unknown> = {}) {
+    this.logger.warn(msg, meta)
+  }
+
+  error(msg: string, meta: Record<string, unknown> = {}) {
+    this.logger.error(msg, meta)
+  }
+
+  debug(msg: string, meta: Record<string, unknown> = {}) {
+    this.logger.debug(msg, meta)
+  }
+}
 </file>
 
 <file path="src/infra/mail/mail-repository.ts">
@@ -9239,6 +9495,24 @@ export function makeAddress(overrides: Partial<Address> = {}): Address {
     userId: new UniqueEntityID('user-1'),
     ...overrides,
   })
+}
+</file>
+
+<file path="test/mail/fake-mailer.ts">
+import type { MailRepository } from '@/infra/mail/mail-repository'
+
+export class FakeMailer implements MailRepository {
+  public sent: Array<{ to: string; subject: string; html: string }> = []
+
+  async send(data: {
+    to: string
+    subject: string
+    html: string
+  }): Promise<void> {
+    this.sent.push(data)
+  }
+
+  async verify(): Promise<void> {}
 }
 </file>
 
@@ -10205,36 +10479,6 @@ export class JwtEncrypter implements Encrypter {
 }
 </file>
 
-<file path="src/infra/env/env.ts">
-import { z } from 'zod'
-
-export const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
-  APP_PORT: z.coerce.number().optional().default(3333),
-  JWT_PRIVATE_KEY: z.string(),
-  JWT_PUBLIC_KEY: z.string(),
-  NODE_ENV: z.string(),
-  DATABASE_HOST: z.string(),
-  DATABASE_PORT: z.string(),
-  DATABASE_USERNAME: z.string(),
-  DATABASE_PASSWORD: z.string(),
-  DATABASE_NAME: z.string(),
-  REDIS_HOST: z.string().optional().default('127.0.0.1'),
-  REDIS_PORT: z.coerce.number().optional().default(6379),
-  REDIS_DB: z.coerce.number().optional().default(0),
-  CLOUDFLARE_ACCOUNT_ID: z.string(),
-  AWS_ACCESS_KEY_ID: z.string(),
-  AWS_SECRET_ACCESS_KEY: z.string(),
-  AWS_BUCKET_NAME: z.string(),
-  RESEND_API_KEY: z.string(),
-  RESET_PASSWORD_URL: z.string(),
-  RATE_LIMIT_POINTS: z.coerce.number(),
-  RATE_LIMIT_DURATION: z.coerce.number(),
-})
-
-export type Env = z.infer<typeof envSchema>
-</file>
-
 <file path="src/infra/events/user/__tests__/on-user-password-changed.e2e-spec.ts">
 import { DomainEvents } from '@/core/events/domain-events'
 import { AppModule } from '@/infra/app.module'
@@ -11082,62 +11326,47 @@ export * from './user-list-response.dto'
 export * from './refresh-token-response.dto'
 </file>
 
-<file path="src/infra/mail/resend/resend-mailer.ts">
-import { Injectable } from '@nestjs/common'
-import { Resend } from 'resend'
-import type { MailRepository } from '../mail-repository'
+<file path="src/infra/logger/logger.module.ts">
+import { Module, Global } from '@nestjs/common'
+import { WinstonLoggerProvider } from './winston/winston.provider'
+import { APP_INTERCEPTOR } from '@nestjs/core'
+import { LoggerService } from './winston/logger.service'
+import { RequestLoggingInterceptor } from './winston/logger.interceptor'
 
-interface SendEmailParams {
-  to: string
-  subject: string
-  html: string
-}
-
-@Injectable()
-export class ResendMailer implements MailRepository {
-  private client: Resend
-
-  constructor() {
-    this.client = new Resend(process.env.RESEND_API_KEY)
-  }
-
-  async send(params: SendEmailParams): Promise<void> {
-    await this.client.emails.send({
-      from: 'onboarding@resend.dev',
-      to: params.to,
-      subject: params.subject,
-      html: params.html,
-    })
-  }
-
-  async verify(): Promise<void> {
-    await this.client.emails.send({
-      to: 'healthcheck@example.com',
-      from: 'no-reply@example.com',
-      subject: '[HealthCheck] Email',
-      html: '<p>Health check</p>',
-    })
-  }
-}
-</file>
-
-<file path="src/infra/storage/storage.module.ts">
-import { Uploader } from '@/shared/storage/uploader'
-import { Module } from '@nestjs/common'
-import { EnvModule } from '../env/env.module'
-import { R2Storage } from './r2/r2-storage'
-
+@Global()
 @Module({
-  imports: [EnvModule],
   providers: [
+    WinstonLoggerProvider,
+    LoggerService,
     {
-      provide: Uploader,
-      useClass: R2Storage,
+      provide: APP_INTERCEPTOR,
+      useClass: RequestLoggingInterceptor,
     },
   ],
-  exports: [Uploader],
+  exports: [LoggerService],
 })
-export class StorageModule {}
+export class LoggerModule {}
+</file>
+
+<file path="src/infra/mail/mailer.module.ts">
+import { Module } from '@nestjs/common'
+import { ResendMailer } from './resend/resend-mailer'
+import { MailRepository } from './mail-repository'
+import { EnvModule } from '../env/env.module'
+import { LoggerModule } from '../logger/logger.module'
+
+@Module({
+  imports: [EnvModule, LoggerModule],
+  providers: [
+    ResendMailer,
+    {
+      provide: MailRepository,
+      useClass: ResendMailer,
+    },
+  ],
+  exports: [MailRepository],
+})
+export class MailerModule {}
 </file>
 
 <file path="src/shared/avatar/application/use-cases/upload-and-create-avatar.ts">
@@ -12437,6 +12666,161 @@ import { AuditLogControllersModule } from './controllers/audit-log/audit-log-con
 export class HttpModule {}
 </file>
 
+<file path="src/infra/storage/r2/r2-storage.ts">
+import { Uploader, type UploadParams } from '@/shared/storage/uploader'
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3'
+import { randomUUID } from 'node:crypto'
+import { Injectable } from '@nestjs/common'
+import { EnvService } from '@/infra/env/env.service'
+import { LoggerService } from '@/infra/logger/winston/logger.service'
+import { withTimeout } from '@/shared/utils/with-timeout'
+import { retryWithBackoff } from '@/shared/utils/retry-with-backoff'
+import { circuitBreaker, BrokenCircuitError } from 'cockatiel'
+import { createCircuitBreaker } from '@/shared/utils/circuit-breaker'
+
+@Injectable()
+export class R2Storage implements Uploader {
+  private client: S3Client
+  private bucketName: string
+  private readonly timeout: number
+  private readonly retryAttempts: number
+  private readonly retryBackoffMs: number
+  private breaker: ReturnType<typeof circuitBreaker>
+
+  constructor(
+    envService: EnvService,
+    private readonly logger: LoggerService,
+  ) {
+    const accountId = envService.get('CLOUDFLARE_ACCOUNT_ID')
+    this.bucketName = envService.get('AWS_BUCKET_NAME')
+    this.timeout = envService.get('STORAGE_TIMEOUT')
+    this.retryAttempts = envService.get('STORAGE_RETRY_ATTEMPTS')
+    this.retryBackoffMs = envService.get('STORAGE_RETRY_BACKOFF')
+
+    this.client = new S3Client({
+      endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
+      region: 'auto',
+      credentials: {
+        accessKeyId: envService.get('AWS_ACCESS_KEY_ID'),
+        secretAccessKey: envService.get('AWS_SECRET_ACCESS_KEY'),
+      },
+    })
+
+    this.breaker = createCircuitBreaker('storage', this.logger)
+  }
+
+  async upload({
+    body,
+    fileName,
+    fileType,
+  }: UploadParams): Promise<{ url: string }> {
+    const uploadId = randomUUID()
+    const uniqueFileName = `${uploadId}-${fileName}`
+
+    try {
+      await this.breaker.execute(() =>
+        retryWithBackoff(
+          () =>
+            withTimeout(
+              this.client.send(
+                new PutObjectCommand({
+                  Bucket: this.bucketName,
+                  Key: uniqueFileName,
+                  ContentType: fileType,
+                  Body: body,
+                }),
+              ),
+              this.timeout,
+            ),
+          {
+            retries: this.retryAttempts,
+            initialDelayMs: this.retryBackoffMs,
+            factor: 2,
+            onRetry: (err, attempt) => {
+              this.logger.warn(
+                `[Storage] upload retry #${attempt} after error: ${String(err)}`,
+              )
+            },
+          },
+        ),
+      )
+      return {
+        url: uniqueFileName,
+      }
+    } catch (e) {
+      if (e instanceof BrokenCircuitError) {
+        this.logger.error(
+          'Serviço de storage indisponível (circuit breaker aberto)',
+        )
+        throw new Error('Serviço de storage indisponível')
+      }
+      throw e
+    }
+  }
+
+  async delete(fileName: string): Promise<void> {
+    try {
+      await this.breaker.execute(() =>
+        retryWithBackoff(
+          () =>
+            withTimeout(
+              this.client.send(
+                new DeleteObjectCommand({
+                  Bucket: this.bucketName,
+                  Key: fileName,
+                }),
+              ),
+              this.timeout,
+            ),
+          {
+            retries: this.retryAttempts,
+            initialDelayMs: this.retryBackoffMs,
+            factor: 2,
+            onRetry: (err, attempt) => {
+              this.logger.warn(
+                `[Storage] delete retry #${attempt} after error: ${String(err)}`,
+              )
+            },
+          },
+        ),
+      )
+    } catch (e) {
+      if (e instanceof BrokenCircuitError) {
+        this.logger.error(
+          'Serviço de storage indisponível (circuit breaker aberto)',
+        )
+        throw new Error('Serviço de storage indisponível')
+      }
+      throw e
+    }
+  }
+}
+</file>
+
+<file path="src/infra/storage/storage.module.ts">
+import { Uploader } from '@/shared/storage/uploader'
+import { Module } from '@nestjs/common'
+import { EnvModule } from '../env/env.module'
+import { R2Storage } from './r2/r2-storage'
+import { LoggerModule } from '../logger/logger.module'
+
+@Module({
+  imports: [EnvModule, LoggerModule],
+  providers: [
+    {
+      provide: Uploader,
+      useClass: R2Storage,
+    },
+  ],
+  exports: [Uploader],
+})
+export class StorageModule {}
+</file>
+
 <file path="src/infra/app.module.ts">
 import { Module } from '@nestjs/common'
 import { ConfigModule } from '@nestjs/config'
@@ -13093,6 +13477,49 @@ export class InMemoryUsersRepository implements UsersRepository {
     DomainEvents.dispatchEventsForAggregate(userId)
   }
 }
+</file>
+
+<file path="src/infra/env/env.ts">
+import { z } from 'zod'
+
+export const envSchema = z.object({
+  NODE_ENV: z.string(),
+  APP_PORT: z.coerce.number().optional().default(3333),
+
+  DATABASE_URL: z.string().url(),
+  DATABASE_HOST: z.string(),
+  DATABASE_PORT: z.string(),
+  DATABASE_USERNAME: z.string(),
+  DATABASE_PASSWORD: z.string(),
+  DATABASE_NAME: z.string(),
+
+  REDIS_HOST: z.string().optional().default('127.0.0.1'),
+  REDIS_PORT: z.coerce.number().optional().default(6379),
+  REDIS_DB: z.coerce.number().optional().default(0),
+  REDIS_COMMAND_TIMEOUT: z.coerce.number(),
+
+  RATE_LIMIT_POINTS: z.coerce.number(),
+  RATE_LIMIT_DURATION: z.coerce.number(),
+
+  CLOUDFLARE_ACCOUNT_ID: z.string(),
+  AWS_ACCESS_KEY_ID: z.string(),
+  AWS_SECRET_ACCESS_KEY: z.string(),
+  AWS_BUCKET_NAME: z.string(),
+  STORAGE_RETRY_ATTEMPTS: z.coerce.number(),
+  STORAGE_RETRY_BACKOFF: z.coerce.number(),
+  STORAGE_TIMEOUT: z.coerce.number(),
+
+  RESEND_API_KEY: z.string(),
+  RESET_PASSWORD_URL: z.string(),
+  EMAIL_RETRY_ATTEMPTS: z.coerce.number(),
+  EMAIL_RETRY_BACKOFF: z.coerce.number(),
+  EMAIL_SEND_TIMEOUT: z.coerce.number(),
+
+  JWT_PRIVATE_KEY: z.string(),
+  JWT_PUBLIC_KEY: z.string(),
+})
+
+export type Env = z.infer<typeof envSchema>
 </file>
 
 <file path="src/infra/http/controllers/user/__tests__/authenticate-user.controller.e2e-spec.ts">
@@ -13963,6 +14390,119 @@ import { RateLimitModule } from '@/shared/rate-limit/rate-limit.module'
   ],
 })
 export class UserControllersModule {}
+</file>
+
+<file path="src/infra/mail/resend/resend-mailer.ts">
+import { HttpException, Injectable } from '@nestjs/common'
+import { Resend } from 'resend'
+import type { MailRepository } from '../mail-repository'
+import { EnvService } from '@/infra/env/env.service'
+import { withTimeout } from '@/shared/utils/with-timeout'
+import { retryWithBackoff } from '@/shared/utils/retry-with-backoff'
+import { BrokenCircuitError } from 'cockatiel'
+import { createCircuitBreaker } from '@/shared/utils/circuit-breaker'
+import type { LoggerPort } from '@/infra/logger/winston/logger.interface'
+
+interface SendEmailParams {
+  to: string
+  subject: string
+  html: string
+}
+
+@Injectable()
+export class ResendMailer implements MailRepository {
+  private client: Resend
+  private readonly timeout: number
+  private readonly retryAttempts: number
+  private readonly retryBackoffMs: number
+  private breaker: ReturnType<typeof createCircuitBreaker>
+
+  constructor(
+    envService: EnvService,
+    private logger: LoggerPort,
+  ) {
+    this.client = new Resend(envService.get('RESEND_API_KEY'))
+    this.timeout = envService.get('EMAIL_SEND_TIMEOUT')
+    this.retryAttempts = envService.get('EMAIL_RETRY_ATTEMPTS')
+    this.retryBackoffMs = envService.get('EMAIL_RETRY_BACKOFF')
+
+    this.breaker = createCircuitBreaker('email', this.logger)
+  }
+
+  async send(params: SendEmailParams): Promise<void> {
+    try {
+      await this.breaker.execute(() =>
+        retryWithBackoff(
+          () =>
+            withTimeout(
+              this.client.emails.send({
+                from: 'onboarding@resend.dev',
+                to: params.to,
+                subject: params.subject,
+                html: params.html,
+              }),
+              this.timeout,
+            ),
+          {
+            retries: this.retryAttempts,
+            initialDelayMs: this.retryBackoffMs,
+            factor: 2,
+            onRetry: (err, attempt) => {
+              this.logger.warn(
+                `[Email] retry #${attempt} after error: ${String(err)}`,
+              )
+            },
+          },
+        ),
+      )
+    } catch (e) {
+      if (e instanceof BrokenCircuitError) {
+        this.logger.error(
+          'Serviço de e-mail indisponível (circuit breaker aberto)',
+        )
+        throw new HttpException('Serviço de e-mail indisponível', 503)
+      }
+      throw e
+    }
+  }
+
+  async verify(): Promise<void> {
+    try {
+      await this.breaker.execute(() =>
+        retryWithBackoff(
+          () =>
+            withTimeout(
+              this.client.emails.send({
+                to: 'healthcheck@example.com',
+                from: 'no-reply@example.com',
+                subject: '[HealthCheck] Email',
+                html: '<p>Health check</p>',
+              }),
+              this.timeout,
+            ),
+          {
+            retries: this.retryAttempts,
+            initialDelayMs: this.retryBackoffMs,
+            factor: 2,
+            onRetry: (err, attempt) => {
+              this.logger.warn(
+                `[verify] Email retry #${attempt} after error: ${String(err)}`,
+              )
+            },
+          },
+        ),
+      )
+    } catch (e) {
+      if (e instanceof BrokenCircuitError) {
+        this.logger.error(
+          'Serviço de e-mail indisponível (circuit breaker aberto)',
+        )
+        throw new HttpException('Serviço de e-mail indisponível', 503)
+      }
+      throw e
+    }
+  }
+}
 </file>
 
 <file path="src/domain/user/application/use-cases/authenticate-user.ts">
@@ -14989,114 +15529,6 @@ import { OnUserResetPassword } from '@/domain/audit-log/application/subscribers/
 export class UserEventsModule {}
 </file>
 
-<file path="package.json">
-{
-  "name": "backend",
-  "version": "0.0.1",
-  "description": "",
-  "author": "",
-  "private": true,
-  "license": "UNLICENSED",
-  "scripts": {
-    "build": "nest build",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
-    "start": "nest start",
-    "start:dev": "nest start --watch",
-    "start:debug": "nest start --debug --watch",
-    "start:prod": "node dist/main",
-    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:cov": "vitest run --coverage",
-    "test:debug": "vitest --inspect-brk -- inspect --logHeapUsage --threads=false",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.mjs",
-    "test:e2e:watch": "vitest --config ./vitest.config.e2e.mjs",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev",
-    "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:migrate:prod": "prisma migrate deploy && prisma generate",
-    "prisma:studio": "prisma studio",
-    "prisma:seed": "prisma db seed",
-    "prepare": "husky install"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.821.0",
-    "@casl/ability": "^6.7.3",
-    "@nestjs-modules/ioredis": "^2.0.2",
-    "@nestjs/axios": "^4.0.0",
-    "@nestjs/common": "^11.0.1",
-    "@nestjs/config": "^4.0.2",
-    "@nestjs/core": "^11.0.1",
-    "@nestjs/jwt": "^11.0.0",
-    "@nestjs/passport": "^11.0.5",
-    "@nestjs/platform-express": "^11.0.1",
-    "@nestjs/swagger": "^11.2.0",
-    "@nestjs/terminus": "^11.0.0",
-    "@nestjs/throttler": "^6.4.0",
-    "@prisma/client": "^6.8.2",
-    "bcryptjs": "^3.0.2",
-    "dayjs": "^1.11.13",
-    "helmet": "^8.1.0",
-    "ioredis": "^5.6.1",
-    "kleur": "^4.1.5",
-    "nest-winston": "^1.10.2",
-    "passport-jwt": "^4.0.1",
-    "rate-limiter-flexible": "^7.1.1",
-    "reflect-metadata": "^0.2.2",
-    "resend": "^4.5.2",
-    "rxjs": "^7.8.2",
-    "swagger-ui-express": "^5.0.1",
-    "winston": "^3.17.0",
-    "zod": "^3.25.28",
-    "zod-validation-error": "^3.4.1"
-  },
-  "devDependencies": {
-    "@eslint/eslintrc": "^3.2.0",
-    "@eslint/js": "^9.18.0",
-    "@faker-js/faker": "^9.8.0",
-    "@nestjs/cli": "^11.0.0",
-    "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.0.1",
-    "@rocketseat/eslint-config": "^2.2.2",
-    "@swc/cli": "^0.6.0",
-    "@swc/core": "^1.10.7",
-    "@types/bcryptjs": "^2.4.6",
-    "@types/express": "^5.0.0",
-    "@types/jest": "^29.5.14",
-    "@types/multer": "^1.4.12",
-    "@types/node": "^22.10.7",
-    "@types/passport-jwt": "^4.0.1",
-    "@types/supertest": "^6.0.2",
-    "@vitest/coverage-v8": "^3.1.4",
-    "dotenv": "^16.5.0",
-    "eslint": "^8.57.1",
-    "eslint-config-prettier": "^10.0.1",
-    "eslint-import-resolver-typescript": "^4.4.2",
-    "eslint-plugin-prettier": "^5.2.2",
-    "globals": "^16.0.0",
-    "husky": "^9.1.7",
-    "jest": "^29.7.0",
-    "multer": "^2.0.0",
-    "prettier": "^3.4.2",
-    "prisma": "^6.8.2",
-    "source-map-support": "^0.5.21",
-    "supertest": "^7.0.0",
-    "ts-jest": "^29.2.5",
-    "ts-loader": "^9.5.2",
-    "ts-node": "^10.9.2",
-    "tsconfig-paths": "^4.2.0",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "^8.20.0",
-    "unplugin-swc": "^1.5.3",
-    "vite-tsconfig-paths": "^5.1.4",
-    "vitest": "^3.1.4"
-  },
-  "prisma": {
-    "seed": "ts-node prisma/seed.ts"
-  }
-}
-</file>
-
 <file path="src/domain/user/enterprise/entities/user.ts">
 import { AggregateRoot } from '@/core/entities/aggregate-root'
 import { UniqueEntityID } from '@/core/entities/unique-entity-id'
@@ -15277,6 +15709,115 @@ export class User extends AggregateRoot<UserProps> {
     }
 
     return user
+  }
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "backend",
+  "version": "0.0.1",
+  "description": "",
+  "author": "",
+  "private": true,
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "nest build",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "start": "nest start",
+    "start:dev": "nest start --watch",
+    "start:debug": "nest start --debug --watch",
+    "start:prod": "node dist/main",
+    "lint": "eslint \"{src,apps,libs,test}/**/*.ts\" --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:cov": "vitest run --coverage",
+    "test:debug": "vitest --inspect-brk -- inspect --logHeapUsage --threads=false",
+    "test:e2e": "vitest run --config ./vitest.config.e2e.mjs",
+    "test:e2e:watch": "vitest --config ./vitest.config.e2e.mjs",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:migrate:prod": "prisma migrate deploy && prisma generate",
+    "prisma:studio": "prisma studio",
+    "prisma:seed": "prisma db seed",
+    "prepare": "husky install"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.821.0",
+    "@casl/ability": "^6.7.3",
+    "@nestjs-modules/ioredis": "^2.0.2",
+    "@nestjs/axios": "^4.0.0",
+    "@nestjs/common": "^11.0.1",
+    "@nestjs/config": "^4.0.2",
+    "@nestjs/core": "^11.0.1",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.0.1",
+    "@nestjs/swagger": "^11.2.0",
+    "@nestjs/terminus": "^11.0.0",
+    "@nestjs/throttler": "^6.4.0",
+    "@prisma/client": "^6.8.2",
+    "bcryptjs": "^3.0.2",
+    "cockatiel": "^3.2.1",
+    "dayjs": "^1.11.13",
+    "helmet": "^8.1.0",
+    "ioredis": "^5.6.1",
+    "kleur": "^4.1.5",
+    "nest-winston": "^1.10.2",
+    "passport-jwt": "^4.0.1",
+    "rate-limiter-flexible": "^7.1.1",
+    "reflect-metadata": "^0.2.2",
+    "resend": "^4.5.2",
+    "rxjs": "^7.8.2",
+    "swagger-ui-express": "^5.0.1",
+    "winston": "^3.17.0",
+    "zod": "^3.25.28",
+    "zod-validation-error": "^3.4.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.2.0",
+    "@eslint/js": "^9.18.0",
+    "@faker-js/faker": "^9.8.0",
+    "@nestjs/cli": "^11.0.0",
+    "@nestjs/schematics": "^11.0.0",
+    "@nestjs/testing": "^11.0.1",
+    "@rocketseat/eslint-config": "^2.2.2",
+    "@swc/cli": "^0.6.0",
+    "@swc/core": "^1.10.7",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/express": "^5.0.0",
+    "@types/jest": "^29.5.14",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.7",
+    "@types/passport-jwt": "^4.0.1",
+    "@types/supertest": "^6.0.2",
+    "@vitest/coverage-v8": "^3.1.4",
+    "dotenv": "^16.5.0",
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-import-resolver-typescript": "^4.4.2",
+    "eslint-plugin-prettier": "^5.2.2",
+    "globals": "^16.0.0",
+    "husky": "^9.1.7",
+    "jest": "^29.7.0",
+    "multer": "^2.0.0",
+    "prettier": "^3.4.2",
+    "prisma": "^6.8.2",
+    "source-map-support": "^0.5.21",
+    "supertest": "^7.0.0",
+    "ts-jest": "^29.2.5",
+    "ts-loader": "^9.5.2",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.20.0",
+    "unplugin-swc": "^1.5.3",
+    "vite-tsconfig-paths": "^5.1.4",
+    "vitest": "^3.1.4"
+  },
+  "prisma": {
+    "seed": "ts-node prisma/seed.ts"
   }
 }
 </file>

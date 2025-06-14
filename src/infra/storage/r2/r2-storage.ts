@@ -7,11 +7,11 @@ import {
 import { randomUUID } from 'node:crypto'
 import { Injectable } from '@nestjs/common'
 import { EnvService } from '@/infra/env/env.service'
-import { LoggerService } from '@/infra/logger/winston/logger.service'
 import { withTimeout } from '@/shared/utils/with-timeout'
 import { retryWithBackoff } from '@/shared/utils/retry-with-backoff'
 import { circuitBreaker, BrokenCircuitError } from 'cockatiel'
 import { createCircuitBreaker } from '@/shared/utils/circuit-breaker'
+import { LoggerRepository } from '@/infra/logger/winston/logger.repository'
 
 @Injectable()
 export class R2Storage implements Uploader {
@@ -24,7 +24,7 @@ export class R2Storage implements Uploader {
 
   constructor(
     envService: EnvService,
-    private readonly logger: LoggerService,
+    private readonly logger: LoggerRepository,
   ) {
     const accountId = envService.get('CLOUDFLARE_ACCOUNT_ID')
     this.bucketName = envService.get('AWS_BUCKET_NAME')

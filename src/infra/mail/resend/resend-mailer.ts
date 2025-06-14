@@ -4,9 +4,9 @@ import type { MailRepository } from '../mail-repository'
 import { EnvService } from '@/infra/env/env.service'
 import { withTimeout } from '@/shared/utils/with-timeout'
 import { retryWithBackoff } from '@/shared/utils/retry-with-backoff'
-import { LoggerService } from '@/infra/logger/winston/logger.service'
 import { BrokenCircuitError } from 'cockatiel'
 import { createCircuitBreaker } from '@/shared/utils/circuit-breaker'
+import { LoggerRepository } from '@/infra/logger/winston/logger.repository'
 
 interface SendEmailParams {
   to: string
@@ -24,7 +24,7 @@ export class ResendMailer implements MailRepository {
 
   constructor(
     envService: EnvService,
-    private logger: LoggerService,
+    private logger: LoggerRepository,
   ) {
     this.client = new Resend(envService.get('RESEND_API_KEY'))
     this.timeout = envService.get('EMAIL_SEND_TIMEOUT')
