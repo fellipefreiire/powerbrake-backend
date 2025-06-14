@@ -1,4 +1,11 @@
-import { Controller, Post, Headers, UseFilters, HttpCode } from '@nestjs/common'
+import {
+  Controller,
+  Post,
+  Headers,
+  UseFilters,
+  HttpCode,
+  UseGuards,
+} from '@nestjs/common'
 import { Public } from '@/infra/auth/public'
 import { UserErrorFilter } from '../../filters/user-error.filter'
 import {
@@ -15,6 +22,7 @@ import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/ref
 import { BadRequestDto, InternalServerErrorDto } from '../../dtos/error/generic'
 import { WrongCredentialsDto } from '../../dtos/error/user'
 import { RefreshTokenResponseDto } from '../../dtos/response/user'
+import { CsrfGuard } from '@/infra/auth/csrf.guard'
 
 @UseFilters(UserErrorFilter)
 @ApiTags('Users')
@@ -26,6 +34,7 @@ export class RefreshTokenController {
 
   @Post('refresh')
   @HttpCode(200)
+  @UseGuards(CsrfGuard)
   @ApiOperation({
     summary: 'Refresh access token',
     description:

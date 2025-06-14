@@ -1,7 +1,7 @@
 import { RefreshUserTokenUseCase } from '@/domain/user/application/use-cases/refresh-user-token'
 import { UserUnauthorizedError } from '@/domain/user/application/use-cases/errors/user-unauthorized-error'
 import { JwtService } from '@nestjs/jwt'
-import type { RefreshTokenPayload } from '@/infra/auth/jwt.strategy'
+import type { UserPayload } from '@/infra/auth/jwt.strategy'
 import type { Role } from '@prisma/client'
 import { FakeCacheService } from 'test/cache/fake-cache'
 import { FakeRefreshTokenService } from 'test/cryptography/fake-refresh-token'
@@ -13,7 +13,7 @@ let fakeTokenService: FakeTokenService
 let fakeCacheService: FakeCacheService
 let refreshTokenService: FakeRefreshTokenService
 
-const validPayload: RefreshTokenPayload = {
+const validPayload: UserPayload = {
   sub: 'user-id-123',
   role: 'ADMIN' as Role,
   jti: 'jti-456',

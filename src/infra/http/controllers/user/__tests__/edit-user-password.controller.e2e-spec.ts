@@ -48,7 +48,7 @@ describe('Edit User Password (E2E)', () => {
   })
 
   it('[204] Success → should update password and revoke other sessions', async () => {
-    const password = '123456'
+    const password = '12345678'
     const user = await userFactory.makePrismaUser({
       passwordHash: await hash(password, 8),
     })

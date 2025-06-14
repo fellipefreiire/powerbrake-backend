@@ -44,6 +44,7 @@
     "@prisma/client": "^6.8.2",
     "bcryptjs": "^3.0.2",
     "cockatiel": "^3.2.1",
+    "cookie-parser": "^1.4.7",
     "dayjs": "^1.11.13",
     "helmet": "^8.1.0",
     "ioredis": "^5.6.1",
@@ -71,6 +72,7 @@
     "@swc/cli": "^0.6.0",
     "@swc/core": "^1.10.7",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.9",
     "@types/express": "^5.0.0",
     "@types/jest": "^29.5.14",
     "@types/multer": "^1.4.12",
@@ -104,5 +106,6 @@
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
-  }
+  },
+  "packageManager": "yarn@1.22.22+sha256.c17d3797fb9a9115bf375e31bfd30058cac6bc9c3b8807a3d8cb2094794b51ca"
 }

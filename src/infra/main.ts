@@ -6,6 +6,7 @@ import { VersioningType } from '@nestjs/common'
 import { AppErrorFilter } from './http/filters/app-error.filter'
 import helmet from 'helmet'
 import { json, urlencoded } from 'express'
+import cookieParser from 'cookie-parser'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
@@ -17,6 +18,12 @@ async function bootstrap() {
   app.use(helmet())
   app.use(json({ limit: '2mb' }))
   app.use(urlencoded({ extended: true, limit: '2mb' }))
+  app.use(cookieParser())
+
+  app.use((req, res, next) => {
+    console.log('[middleware debug]', req.headers.cookie)
+    next()
+  })
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Powerbrake API')

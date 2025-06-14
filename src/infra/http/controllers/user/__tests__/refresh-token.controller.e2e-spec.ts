@@ -10,6 +10,7 @@ import { RefreshTokenService } from '@/infra/auth/refresh-token.service'
 import type { User } from '@/domain/user/enterprise/entities/user'
 import { randomUUID } from 'node:crypto'
 import { CacheModule } from '@/infra/cache/cache.module'
+import cookieParser from 'cookie-parser'
 
 const refreshTokenEndpoint = '/v1/users/refresh'
 
@@ -20,6 +21,7 @@ describe('Refresh Token (E2E)', () => {
   let refreshTokenService: RefreshTokenService
   let adminUser: User
   let jwt: JwtService
+  let csrfToken: string
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -31,7 +33,7 @@ describe('Refresh Token (E2E)', () => {
     app.enableVersioning({
       type: VersioningType.URI,
     })
-
+    app.use(cookieParser())
     prisma = moduleRef.get(PrismaService)
     userFactory = moduleRef.get(UserFactory)
     refreshTokenService = moduleRef.get(RefreshTokenService)
@@ -53,6 +55,8 @@ describe('Refresh Token (E2E)', () => {
       email: 'johndoe@example.com',
       role: 'ADMIN',
     })
+
+    csrfToken = 'secure-csrf-token'
   })
 
   afterEach(async () => {
@@ -76,6 +80,8 @@ describe('Refresh Token (E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(refreshTokenEndpoint)
       .set('Authorization', `Bearer ${refreshToken}`)
+      .set('Cookie', `csrfToken=${csrfToken}`)
+      .set('x-csrf-token', csrfToken)
 
     expect(response.statusCode).toBe(200)
     expect(response.body).toEqual({
@@ -94,6 +100,8 @@ describe('Refresh Token (E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(refreshTokenEndpoint)
       .set('Authorization', 'Bearer invalid.token.here')
+      .set('Cookie', `csrfToken=${csrfToken}`)
+      .set('x-csrf-token', csrfToken)
 
     expect(response.statusCode).toBe(401)
     expect(response.body).toEqual(
@@ -122,6 +130,8 @@ describe('Refresh Token (E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(refreshTokenEndpoint)
       .set('Authorization', `Bearer ${expiredToken}`)
+      .set('Cookie', `csrfToken=${csrfToken}`)
+      .set('x-csrf-token', csrfToken)
 
     expect(response.statusCode).toBe(401)
     expect(response.body).toEqual(
@@ -150,6 +160,8 @@ describe('Refresh Token (E2E)', () => {
     const response = await request(app.getHttpServer())
       .post(refreshTokenEndpoint)
       .set('Authorization', `Bearer ${fakeToken}`)
+      .set('Cookie', `csrfToken=${csrfToken}`)
+      .set('x-csrf-token', csrfToken)
 
     expect(response.statusCode).toBe(401)
     expect(response.body).toEqual(
@@ -162,9 +174,10 @@ describe('Refresh Token (E2E)', () => {
   })
 
   it('[401] Unauthorized → should return error if no Authorization header is sent', async () => {
-    const response = await request(app.getHttpServer()).post(
-      refreshTokenEndpoint,
-    )
+    const response = await request(app.getHttpServer())
+      .post(refreshTokenEndpoint)
+      .set('Cookie', `csrfToken=${csrfToken}`)
+      .set('x-csrf-token', csrfToken)
 
     expect(response.statusCode).toBe(401)
     expect(response.body).toEqual(
@@ -172,6 +185,31 @@ describe('Refresh Token (E2E)', () => {
         statusCode: 401,
         error: 'Unauthorized',
         message: 'Unauthorized',
+      }),
+    )
+  })
+  it('[403] Forbidden → should reject request without CSRF token', async () => {
+    const jti = await refreshTokenService.create(adminUser.id.toString())
+
+    const refreshToken = jwt.sign(
+      {
+        sub: adminUser.id.toString(),
+        role: adminUser.role,
+        jti,
+      },
+      { algorithm: 'RS256' },
+    )
+
+    const response = await request(app.getHttpServer())
+      .post(refreshTokenEndpoint)
+      .set('Authorization', `Bearer ${refreshToken}`)
+
+    expect(response.statusCode).toBe(403)
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        statusCode: 403,
+        message: 'Invalid CSRF token',
+        error: 'Forbidden',
       }),
     )
   })

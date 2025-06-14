@@ -50,6 +50,19 @@ export class AppErrorFilter implements ExceptionFilter {
       return
     }
 
+    if (
+      exception instanceof HttpException &&
+      exception.getStatus() === 403 &&
+      exception.message === 'Invalid CSRF token'
+    ) {
+      res.status(403).json({
+        statusCode: 403,
+        error: 'Forbidden',
+        message: 'Invalid CSRF token',
+      })
+      return
+    }
+
     this.logger.error(exception)
     res.status(500).json({
       statusCode: 500,
