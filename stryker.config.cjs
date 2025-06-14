@@ -18,7 +18,7 @@ module.exports = {
   tsconfigFile: 'tsconfig.stryker.json',
   checkers: ['typescript'],
   vitest: {
-    configFile: 'vitest.config.mjs',
+    configFile: 'vitest.config.stryker.mjs',
   },
   mutator: {
     excludedMutations: ['BooleanSubstitution', 'StringLiteral'],

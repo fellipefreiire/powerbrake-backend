@@ -6,6 +6,11 @@ export default defineConfig({
   test: {
     globals: true,
     root: './',
+    exclude: [
+      '**/.stryker-tmp/**',
+      'vitest.config.stryker.ts',
+      'node_modules'
+    ],
   },
   plugins: [
     tsConfigPaths(),
