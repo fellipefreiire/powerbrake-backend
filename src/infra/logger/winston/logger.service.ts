@@ -3,7 +3,7 @@ import { Logger } from 'winston'
 import { WINSTON_LOGGER } from './winston.token'
 
 @Injectable()
-export class AppLogger {
+export class LoggerService {
   constructor(@Inject(WINSTON_LOGGER) private readonly logger: Logger) {}
 
   info(msg: string, meta: Record<string, unknown> = {}) {

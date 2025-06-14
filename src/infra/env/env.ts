@@ -25,6 +25,10 @@ export const envSchema = z.object({
   REDIS_COMMAND_TIMEOUT: z.coerce.number(),
   EMAIL_SEND_TIMEOUT: z.coerce.number(),
   STORAGE_TIMEOUT: z.coerce.number(),
+  EMAIL_RETRY_ATTEMPTS: z.coerce.number(),
+  EMAIL_RETRY_BACKOFF: z.coerce.number(),
+  STORAGE_RETRY_ATTEMPTS: z.coerce.number(),
+  STORAGE_RETRY_BACKOFF: z.coerce.number(),
 })
 
 export type Env = z.infer<typeof envSchema>

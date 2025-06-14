@@ -9,14 +9,14 @@ import { Reflector } from '@nestjs/core'
 import { Observable, tap, catchError, throwError } from 'rxjs'
 
 import { SERVICE_TAG } from '@/infra/decorators/service-tag.decorator'
-import { AppLogger } from './logger.service'
+import { LoggerService } from './logger.service'
 
 @Injectable()
 export class RequestLoggingInterceptor
   implements NestInterceptor<unknown, unknown>
 {
   constructor(
-    private readonly logger: AppLogger,
+    private readonly logger: LoggerService,
     private readonly reflector: Reflector,
   ) {}
 
