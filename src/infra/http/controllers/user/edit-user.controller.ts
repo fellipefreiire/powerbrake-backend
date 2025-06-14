@@ -40,19 +40,26 @@ import {
 import { UserResponseDto } from '../../dtos/response/user'
 import { ParseUuidPipe, ZodValidationPipe } from '../../pipes'
 import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-update-self.handler'
+import { sanitize } from '@/shared/utils/sanitize-html'
 
 const editUserBodySchema = z.object({
-  name: z.string().optional(),
+  name: z
+    .string()
+    .optional()
+    .transform((val) => (val ? sanitize(val) : val)),
   addresses: z
     .array(
       z.object({
-        street: z.string(),
-        number: z.string(),
-        complement: z.string().nullish(),
-        neighborhood: z.string(),
-        city: z.string(),
-        state: z.string(),
-        zipCode: z.string(),
+        street: z.string().transform((val) => sanitize(val)),
+        number: z.string().transform((val) => sanitize(val)),
+        complement: z
+          .string()
+          .optional()
+          .transform((val) => (val ? sanitize(val) : val)),
+        neighborhood: z.string().transform((val) => sanitize(val)),
+        city: z.string().transform((val) => sanitize(val)),
+        state: z.string().transform((val) => sanitize(val)),
+        zipCode: z.string().transform((val) => sanitize(val)),
       }),
     )
     .optional(),

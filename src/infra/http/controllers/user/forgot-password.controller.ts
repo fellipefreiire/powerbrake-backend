@@ -23,9 +23,13 @@ import { EnvService } from '@/infra/env/env.service'
 import { Public } from '@/infra/auth/public'
 import { RateLimit } from '@/shared/rate-limit/rate-limit.decorator'
 import { RateLimitGuard } from '@/shared/rate-limit/rate-limit.guard'
+import { sanitize } from '@/shared/utils/sanitize-html'
 
 const forgotPasswordBodySchema = z.object({
-  email: z.string().email(),
+  email: z
+    .string()
+    .email()
+    .transform((val) => sanitize(val)),
 })
 
 type ForgotPasswordBodySchema = z.infer<typeof forgotPasswordBodySchema>

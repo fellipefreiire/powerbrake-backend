@@ -34,10 +34,14 @@ import { AuthenticateUserRequestDto } from '../../dtos/requests/user'
 import { AuthenticateUserResponseDto } from '../../dtos/response/user'
 import { RateLimit } from '@/shared/rate-limit/rate-limit.decorator'
 import { RateLimitGuard } from '@/shared/rate-limit/rate-limit.guard'
+import { sanitize } from '@/shared/utils/sanitize-html'
 
 const authenticateBodySchema = z.object({
-  email: z.string().email(),
-  password: z.string(),
+  email: z
+    .string()
+    .email()
+    .transform((val) => sanitize(val)),
+  password: z.string().transform((val) => sanitize(val)),
 })
 
 type AuthenticateBodySchema = z.infer<typeof authenticateBodySchema>

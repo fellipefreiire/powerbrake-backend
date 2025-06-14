@@ -5,6 +5,7 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger'
 import { VersioningType } from '@nestjs/common'
 import { AppErrorFilter } from './http/filters/app-error.filter'
 import helmet from 'helmet'
+import { json, urlencoded } from 'express'
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule)
@@ -14,6 +15,8 @@ async function bootstrap() {
 
   app.useGlobalFilters(new AppErrorFilter())
   app.use(helmet())
+  app.use(json({ limit: '2mb' }))
+  app.use(urlencoded({ extended: true, limit: '2mb' }))
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Powerbrake API')

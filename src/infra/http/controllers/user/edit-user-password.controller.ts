@@ -36,10 +36,17 @@ import { CurrentUser } from '@/infra/auth/current-user.decorator'
 import { EditUserPasswordRequestDto } from '../../dtos/requests/user'
 import type { UserPayload } from '@/infra/auth/jwt.strategy'
 import { userCanUpdateSelfHandler } from '@/infra/auth/casl/handlers/user-can-update-self.handler'
+import { sanitize } from '@/shared/utils/sanitize-html'
 
 const editUserPasswordBodySchema = z.object({
-  currentPassword: z.string().min(6),
-  newPassword: z.string().min(6),
+  currentPassword: z
+    .string()
+    .min(8)
+    .transform((val) => sanitize(val)),
+  newPassword: z
+    .string()
+    .min(8)
+    .transform((val) => sanitize(val)),
 })
 
 type EditUserPasswordBody = z.infer<typeof editUserPasswordBodySchema>

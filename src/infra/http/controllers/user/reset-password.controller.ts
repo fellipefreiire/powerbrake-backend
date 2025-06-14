@@ -23,10 +23,14 @@ import { Public } from '@/infra/auth/public'
 import { ResetPasswordRequestDto } from '../../dtos/requests/user'
 import { RateLimit } from '@/shared/rate-limit/rate-limit.decorator'
 import { RateLimitGuard } from '@/shared/rate-limit/rate-limit.guard'
+import { sanitize } from '@/shared/utils/sanitize-html'
 
 export const resetPasswordBodySchema = z.object({
   token: z.string().nonempty(),
-  password: z.string().min(8),
+  password: z
+    .string()
+    .min(8)
+    .transform((val) => sanitize(val)),
 })
 
 export type ResetPasswordBodySchema = z.infer<typeof resetPasswordBodySchema>

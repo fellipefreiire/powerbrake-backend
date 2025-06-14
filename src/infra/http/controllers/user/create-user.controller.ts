@@ -42,20 +42,27 @@ import { UserResponseDto } from '../../dtos/response/user'
 import { CreateUserRequestDto } from '../../dtos/requests/user'
 import { CurrentUser } from '@/infra/auth/current-user.decorator'
 import type { UserPayload } from '@/infra/auth/jwt.strategy'
+import { sanitize } from '@/shared/utils/sanitize-html'
 
 const createUserBodySchema = z.object({
-  name: z.string(),
-  email: z.string().email(),
-  password: z.string(),
+  name: z.string().transform((val) => sanitize(val)),
+  email: z
+    .string()
+    .email()
+    .transform((val) => sanitize(val)),
+  password: z.string().transform((val) => sanitize(val)),
   addresses: z.array(
     z.object({
-      street: z.string(),
-      number: z.string(),
-      complement: z.string().nullish(),
-      neighborhood: z.string(),
-      city: z.string(),
-      state: z.string(),
-      zipCode: z.string(),
+      street: z.string().transform((val) => sanitize(val)),
+      number: z.string().transform((val) => sanitize(val)),
+      complement: z
+        .string()
+        .nullish()
+        .transform((val) => (val ? sanitize(val) : val)),
+      neighborhood: z.string().transform((val) => sanitize(val)),
+      city: z.string().transform((val) => sanitize(val)),
+      state: z.string().transform((val) => sanitize(val)),
+      zipCode: z.string().transform((val) => sanitize(val)),
     }),
   ),
   role: z.nativeEnum(Role),
